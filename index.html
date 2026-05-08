@@ -197,6 +197,8 @@ textarea.fc{resize:vertical;min-height:75px}
 .d-kt{background:linear-gradient(135deg,#1a5276,#2980b9)}
 .d-vh{background:linear-gradient(135deg,#6d2177,#9b59b6)}
 .d-hc{background:linear-gradient(135deg,#14584a,#1abc9c)}
+.d-ca{background:linear-gradient(135deg,#7b1a1a,#c0392b)}
+.d-qs{background:linear-gradient(135deg,#1a4a1a,#27ae60)}
 /* DASH PANELS */
 .dash2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
 @media(max-width:640px){.dash2{grid-template-columns:1fr}}
@@ -299,7 +301,7 @@ textarea.fc{resize:vertical;min-height:75px}
 <section class="sec" id="sec-depts">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
     <div style="font-weight:700;font-size:16px;color:var(--navy)">&#127970; Theo dõi tiến độ theo đơn vị</div>
-    <button class="btn b-pr" onclick="openModal(0)" id="btnAddDept">&#10133; Thêm nhiệm vụ</button>
+    <button class="btn b-pr admin-only" onclick="openModal(0)" id="btnAddDept">&#10133; Thêm nhiệm vụ</button>
   </div>
   <div class="dg" id="deptGrid"></div>
 </section>
@@ -334,7 +336,7 @@ textarea.fc{resize:vertical;min-height:75px}
     </select>
     <select class="fs" id="filterDept" onchange="renderTable()"><option value="">Tất cả đơn vị</option></select>
     <select class="fs" id="filterPri" onchange="renderTable()"><option value="">Mọi ưu tiên</option><option value="cao">Cao</option><option value="tb">Trung bình</option><option value="thap">Thấp</option></select>
-    <button class="btn b-pr" onclick="openModal(0)">&#10133; Thêm nhiệm vụ</button>
+    <button class="btn b-pr admin-only" onclick="openModal(0)">&#10133; Thêm nhiệm vụ</button>
   </div>
   <div class="tw"><table>
     <thead><tr>
@@ -348,12 +350,16 @@ textarea.fc{resize:vertical;min-height:75px}
 
 <!-- KANBAN -->
 <section class="sec" id="sec-kanban">
-  <div class="tb"><span style="font-weight:600;color:var(--muted);font-size:13px">Theo trạng thái</span><div style="flex:1"></div><button class="btn b-pr" onclick="openModal(0)">&#10133; Thêm nhiệm vụ</button></div>
+  <div class="tb"><span style="font-weight:600;color:var(--muted);font-size:13px">Theo trạng thái</span><div style="flex:1"></div><button class="btn b-pr admin-only" onclick="openModal(0)">&#10133; Thêm nhiệm vụ</button></div>
   <div class="kb" id="kanbanBoard"></div>
 </section>
 
 <!-- AI EXTRACT -->
 <section class="sec" id="sec-extract">
+  <div id="aiViewerNotice" style="display:none;background:#fff3cd;border:1.5px solid #ffc107;border-radius:12px;padding:16px 20px;margin-bottom:16px;color:#856404;font-size:13px;font-weight:500">
+    &#128274; Chức năng Trích xuất AI chỉ dành cho <strong>Quản trị viên</strong>. Vui lòng đăng nhập bằng mã PIN để sử dụng.
+  </div>
+  <div id="aiAdminPanel">
   <div class="aip">
     <div class="aiph"><span style="font-size:20px">&#129302;</span><div style="flex:1"><div style="font-size:15px;font-weight:700">Trích xuất nhiệm vụ bằng AI</div><div style="font-size:11px;opacity:.75;margin-top:1px">Dán văn bản kết luận, thông báo giao việc — AI tự động nhận diện và tạo nhiệm vụ</div></div><div class="aibdg">AI</div></div>
     <div class="aipb">
@@ -373,6 +379,7 @@ textarea.fc{resize:vertical;min-height:75px}
         </div>
       </div>
     </div>
+  </div>
   </div>
 </section>
 
@@ -522,7 +529,9 @@ var MAIN_DEPTS = [
   { key: 'VP', cls: 'd-vp', icon: '&#127963;' },
   { key: 'KT', cls: 'd-kt', icon: '&#128188;' },
   { key: 'VH', cls: 'd-vh', icon: '&#127914;' },
-  { key: 'HC', cls: 'd-hc', icon: '&#127978;' }
+  { key: 'HC', cls: 'd-hc', icon: '&#127978;' },
+  { key: 'CA', cls: 'd-ca', icon: '&#128110;' },
+  { key: 'QS', cls: 'd-qs', icon: '&#129354;' }
 ];
 var STATUS_LABELS = {
   'chua': 'Chưa bắt đầu',
@@ -557,11 +566,14 @@ function saveAndRefresh() {
   updateAdminUI();
 }
 function updateAdminUI() {
-  // Ẩn/hiện các nút Thêm nhiệm vụ ở thanh toolbar
   var addBtns = document.querySelectorAll('.admin-only');
   for (var i = 0; i < addBtns.length; i++) {
     addBtns[i].style.display = isAdmin ? '' : 'none';
   }
+  var aiPanel = document.getElementById('aiAdminPanel');
+  var aiNotice = document.getElementById('aiViewerNotice');
+  if (aiPanel) aiPanel.style.display = isAdmin ? '' : 'none';
+  if (aiNotice) aiNotice.style.display = isAdmin ? 'none' : 'block';
 }
 
 // ─── CLOCK ────────────────────────────────────────────────────────────
@@ -1504,24 +1516,74 @@ document.addEventListener('keydown', function(e) {
 // ─── SAMPLE DATA ──────────────────────────────────────────────────────
 function initSampleData() {
   var now = new Date();
-  function addDays(n) {
-    var d = new Date(now);
-    d.setDate(d.getDate() + n);
-    return d.toISOString().split('T')[0];
-  }
+  function d(s) { return s; } // date string YYYY-MM-DD
   tasks = [
-    { id:1,  content:'Hoàn thiện quy chế làm việc của UBND xã nhiệm kỳ 2024-2026', doc:'QĐ số 01/QĐ-UBND', assignDate:addDays(-15), dept:'VP', coord:'', deadline:addDays(-2), priority:'cao', status:'dang', progress:75, note:'Đang xin ý kiến các thành viên UBND', createdAt:addDays(-15), history:[{date:addDays(-15),action:'Tạo mới'},{date:addDays(-8),action:'Cập nhật tiến độ 75%'}] },
-    { id:2,  content:'Tổ chức họp HĐND xã thường kỳ quý II/2025, chuẩn bị tài liệu và mời đại biểu', doc:'TB số 05/TB-HĐND', assignDate:addDays(-10), dept:'VP', coord:'TC', deadline:addDays(4), priority:'cao', status:'dang', progress:55, note:'Đang chuẩn bị tài liệu họp', createdAt:addDays(-10), history:[{date:addDays(-10),action:'Tạo mới'}] },
-    { id:3,  content:'Hoàn thiện hồ sơ lưu trữ văn bản năm 2024 gửi về tỉnh theo đúng quy định', doc:'CV số 19/CV-VP', assignDate:addDays(-20), dept:'VP', coord:'', deadline:addDays(-5), priority:'tb', status:'hoan', progress:100, note:'Đã gửi đầy đủ hồ sơ lưu trữ', createdAt:addDays(-20), history:[{date:addDays(-20),action:'Tạo mới'},{date:addDays(-6),action:'Đánh dấu hoàn thành'}] },
-    { id:4,  content:'Xây dựng phương án phát triển kinh tế hộ gia đình gắn với chương trình OCOP 2025', doc:'KL số 08/KL-UBND', assignDate:addDays(-7), dept:'KT', coord:'', deadline:addDays(3), priority:'cao', status:'dang', progress:40, note:'Đang khảo sát thực tế tại các hộ dân', createdAt:addDays(-7), history:[{date:addDays(-7),action:'Tạo mới'}] },
-    { id:5,  content:'Lập báo cáo tình hình phát triển kinh tế - xã hội 6 tháng đầu năm 2025', doc:'CV số 22/CV-UBND', assignDate:addDays(-5), dept:'KT', coord:'TC', deadline:addDays(8), priority:'tb', status:'chua', progress:0, note:'', createdAt:addDays(-5), history:[{date:addDays(-5),action:'Tạo mới'}] },
-    { id:6,  content:'Hỗ trợ hộ nghèo, cận nghèo tiếp cận chương trình tín dụng ưu đãi Ngân hàng CSXH', doc:'', assignDate:addDays(-12), dept:'KT', coord:'', deadline:addDays(-4), priority:'cao', status:'dang', progress:60, note:'Đã tổ chức 2 buổi tư vấn, còn 3 thôn chưa hoàn thành', createdAt:addDays(-12), history:[{date:addDays(-12),action:'Tạo mới'},{date:addDays(-5),action:'Cập nhật 60%'}] },
-    { id:7,  content:'Tổ chức Ngày hội Đại đoàn kết toàn dân tộc tại các khu dân cư', doc:'KH số 12/KH-UBND', assignDate:addDays(-6), dept:'VH', coord:'', deadline:addDays(5), priority:'cao', status:'dang', progress:60, note:'Đã phân công nhiệm vụ cho từng khu dân cư', createdAt:addDays(-6), history:[{date:addDays(-6),action:'Tạo mới'}] },
-    { id:8,  content:'Thực hiện tổng điều tra dân số và nhà ở trên địa bàn xã, lập danh sách hộ dân', doc:'CV số 45/CV-CTK', assignDate:addDays(-20), dept:'VH', coord:'CA', deadline:addDays(-3), priority:'cao', status:'dang', progress:80, note:'Đã hoàn thành 8/10 thôn', createdAt:addDays(-20), history:[{date:addDays(-20),action:'Tạo mới'},{date:addDays(-5),action:'Cập nhật 80%'}] },
-    { id:9,  content:'Vệ sinh môi trường, chỉnh trang làng xã chuẩn bị lễ hội truyền thống năm 2025', doc:'', assignDate:addDays(-5), dept:'VH', coord:'', deadline:addDays(12), priority:'thap', status:'chua', progress:0, note:'', createdAt:addDays(-5), history:[{date:addDays(-5),action:'Tạo mới'}] },
-    { id:10, content:'Cải cách, hiện đại hóa thủ tục hành chính, triển khai DVC trực tuyến mức độ 4', doc:'QĐ số 18/QĐ-UBND', assignDate:addDays(-12), dept:'HC', coord:'VP', deadline:addDays(10), priority:'cao', status:'dang', progress:50, note:'Đã cài đặt phần mềm, đang tập huấn cán bộ', createdAt:addDays(-12), history:[{date:addDays(-12),action:'Tạo mới'}] },
-    { id:11, content:'Tiếp nhận và giải quyết hồ sơ TTHC theo cơ chế một cửa, một cửa liên thông', doc:'QĐ số 20/QĐ-UBND', assignDate:addDays(-3), dept:'HC', coord:'TP', deadline:addDays(-1), priority:'tb', status:'dang', progress:35, note:'Đang xử lý tồn đọng hồ sơ cũ', createdAt:addDays(-3), history:[{date:addDays(-3),action:'Tạo mới'}] },
-    { id:12, content:'Công khai thủ tục hành chính tại trụ sở và trên cổng thông tin điện tử', doc:'', assignDate:addDays(-8), dept:'HC', coord:'', deadline:addDays(6), priority:'thap', status:'dang', progress:70, note:'Đã công khai 85% TTHC theo danh mục', createdAt:addDays(-8), history:[{date:addDays(-8),action:'Tạo mới'},{date:addDays(-2),action:'Cập nhật 70%'}] }
+    // ── PHÒNG VĂN HOÁ - XÃ HỘI ─────────────────────────────────────────
+    {id:101, content:'Rà soát quy chế, quy trình xử lý công việc; đảm bảo giải quyết TTHC nhanh nhất, cán bộ làm hết việc không hết giờ', doc:'19/TB-UBND ngày 10/01/2026', assignDate:'2026-01-10', dept:'VH', coord:'', deadline:'', priority:'tb', status:'hoan', progress:100, note:'Không hạn - đã thực hiện thường xuyên', createdAt:'2026-01-10', history:[{date:'2026-01-10',action:'Tạo mới'}]},
+    {id:102, content:'Rà soát, cập nhật Phương án tăng trưởng kinh tế - xã hội năm 2026 theo kết luận Hội nghị giao chỉ tiêu', doc:'27/TB-UBND ngày 15/01/2026', assignDate:'2026-01-15', dept:'VH', coord:'KT', deadline:'', priority:'tb', status:'hoan', progress:100, note:'Không hạn - đã thực hiện', createdAt:'2026-01-15', history:[{date:'2026-01-15',action:'Tạo mới'}]},
+    {id:103, content:'Thực hiện CCHC, cải cách TTHC; xây dựng chính quyền xã hiệu lực hiệu quả; phát huy Tổ công nghệ số cộng đồng; chuẩn bị bầu cử Quốc hội và HĐND', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'VH', coord:'HC,VP', deadline:'', priority:'cao', status:'dang', progress:60, note:'Đang triển khai thực hiện', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:104, content:'Phối hợp Tỉnh đoàn phát huy Tổ công nghệ số cộng đồng; tổ chức phong trào đổi mới sáng tạo tại cơ sở mỗi tháng 1-2 ý tưởng khả thi', doc:'184/TB-UBND ngày 19/3/2026', assignDate:'2026-03-19', dept:'VH', coord:'', deadline:'', priority:'tb', status:'dang', progress:40, note:'Đang triển khai', createdAt:'2026-03-19', history:[{date:'2026-03-19',action:'Tạo mới'}]},
+    {id:105, content:'Xây dựng kế hoạch triển khai Quyết định 155/QĐ-TTg về hỗ trợ phụ nữ khởi nghiệp; báo cáo kết quả trước 25/10/2026', doc:'174/KH-UBND ngày 06/05/2026', assignDate:'2026-05-07', dept:'VH', coord:'KT', deadline:'2026-10-25', priority:'tb', status:'dang', progress:20, note:'Đang xây dựng kế hoạch', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:106, content:'Phối hợp tổ chức điều dưỡng tập trung cho người có công; lập danh sách đối tượng gửi Trung tâm trước 5 ngày', doc:'2936/KH-SNV ngày 07/05/2026', assignDate:'2026-05-07', dept:'VH', coord:'', deadline:'2026-06-30', priority:'tb', status:'dang', progress:30, note:'Đang lập danh sách đối tượng', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:107, content:'Triển khai hoạt động truyền thông hưởng ứng Ngày Thalassemia Thế giới 08/5; báo cáo kết quả về Sở Y tế trước 25/5/2026', doc:'3299/SYT-NVY ngày 07/05/2026', assignDate:'2026-05-07', dept:'VH', coord:'YT', deadline:'2026-05-25', priority:'tb', status:'qua', progress:0, note:'Chưa thực hiện', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:108, content:'Phân bổ chỉ tiêu tuyển sinh lớp 10 năm học 2026-2027 cho Trường Phổ thông dân tộc nội trú 2 Gia Lai; báo cáo trước 13/5/2026', doc:'51/THPT-DTNTT ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'', deadline:'2026-05-13', priority:'cao', status:'qua', progress:0, note:'Đã quá hạn', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:109, content:'Tăng cường giám sát, phòng chống bệnh do vi rút Hanta; phối hợp ngành Y tế triển khai biện pháp phòng chống, tuyên truyền vệ sinh môi trường', doc:'3334/SYT-NVY ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'YT', deadline:'', priority:'cao', status:'dang', progress:50, note:'Đang phối hợp triển khai', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:110, content:'Cập nhật, làm sạch dữ liệu trẻ em trên Hệ thống quản lý thông tin trẻ em; hoàn thành trước 30/6/2026; báo cáo định kỳ trước 15 hằng tháng', doc:'3336/SYT-BTXHTE ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'CA', deadline:'2026-06-30', priority:'cao', status:'dang', progress:25, note:'Đang phân công công chức thực hiện', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:111, content:'Khẩn trương hoàn thiện dự thảo Đề án thành lập trường phổ thông nội trú xã Ia Dom; báo cáo Sở GD&ĐT trước 11/5/2026', doc:'2519/SGDĐT-TCCB ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'KT', deadline:'2026-05-11', priority:'cao', status:'qua', progress:80, note:'Chậm tiến độ - đang hoàn thiện', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:112, content:'Xây dựng kế hoạch khám sức khỏe định kỳ/khám sàng lọc miễn phí cho người dân theo Chỉ thị 17/CT-TTg; phối hợp Sở Y tế trước 15/5/2026', doc:'5715/UBND-KGVX ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'YT', deadline:'2026-05-15', priority:'cao', status:'dang', progress:30, note:'Chờ kế hoạch của Sở Y tế', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:113, content:'Báo cáo tình hình hoạt động du lịch chăm sóc sức khỏe gửi Sở VHTTDL trước 22/5/2026', doc:'1808/SVHTTDL-QLPTDL ngày 07/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'', deadline:'2026-05-22', priority:'thap', status:'chua', progress:0, note:'', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:114, content:'Xây dựng báo cáo đánh giá công tác quản lý và tổ chức lễ hội; gửi Sở VHTTDL trước 15/5/2026', doc:'1827/SVHTTDL-QLVHGĐ ngày 08/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'', deadline:'2026-05-15', priority:'tb', status:'dang', progress:40, note:'Đang soạn báo cáo', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:115, content:'Báo cáo kết quả thực hiện Nghị định 105/2020/NĐ-CP về chính sách phát triển GDMN; gửi Sở GD&ĐT trước 12/5/2026', doc:'2527/SGDĐT-MNTH ngày 08/05/2026', assignDate:'2026-05-08', dept:'VH', coord:'', deadline:'2026-05-12', priority:'cao', status:'qua', progress:0, note:'Đã quá hạn', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:116, content:'Bàn giao 04 nhà ở thuộc Chương trình MTQG phát triển KTXH vùng DTTS&MN; hoàn thiện hồ sơ quyết toán trong ngày 08/5/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'VH', coord:'', deadline:'2026-05-08', priority:'cao', status:'hoan', progress:100, note:'Đã bàn giao 04 nhà, đang hoàn thiện hồ sơ quyết toán', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-05-08',action:'Đánh dấu hoàn thành'}]},
+    {id:117, content:'Giải quyết việc đóng BHXH cho lực lượng an ninh cơ sở; phối hợp cơ quan BHXH hoàn thiện hồ sơ, thủ tục', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'VH', coord:'CA', deadline:'', priority:'tb', status:'dang', progress:50, note:'Đang làm việc với cơ quan BHXH', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'}]},
+    // ── PHÒNG KINH TẾ ────────────────────────────────────────────────────
+    {id:201, content:'Rà soát, cập nhật Phương án tăng trưởng kinh tế - xã hội năm 2026; đánh giá dư địa tăng trưởng và khả năng huy động nguồn lực', doc:'27/TB-UBND ngày 15/01/2026', assignDate:'2026-01-15', dept:'KT', coord:'TC', deadline:'', priority:'tb', status:'hoan', progress:100, note:'Không hạn - đã hoàn thành', createdAt:'2026-01-15', history:[{date:'2026-01-15',action:'Tạo mới'}]},
+    {id:202, content:'Triển khai quy hoạch chung xây dựng cấp xã; giải phóng mặt bằng công trình trọng điểm; thực hiện đầu tư công, MTQG theo phân kỳ', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'KT', coord:'DC', deadline:'', priority:'cao', status:'dang', progress:55, note:'Đang triển khai theo kế hoạch', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:203, content:'Quản lý tài nguyên khoáng sản trên địa bàn - lực lượng tuyến đầu; kiểm tra hàng tuần kể cả ngoài giờ; lắp camera giám sát khu vực nguy cơ cao', doc:'217/TB-UBND ngày 30/3/2026', assignDate:'2026-03-30', dept:'KT', coord:'CA', deadline:'', priority:'cao', status:'dang', progress:40, note:'Đã thành lập Tổ kiểm tra, đang triển khai', createdAt:'2026-03-30', history:[{date:'2026-03-30',action:'Tạo mới'}]},
+    {id:204, content:'Làm tốt công tác giải phóng mặt bằng; quản lý trật tự xây dựng; quản lý đất đai tài nguyên khoáng sản môi trường', doc:'221/TB-UBND ngày 30/3/2026', assignDate:'2026-03-30', dept:'KT', coord:'DC', deadline:'', priority:'cao', status:'dang', progress:50, note:'Đang thực hiện thường xuyên', createdAt:'2026-03-30', history:[{date:'2026-03-30',action:'Tạo mới'}]},
+    {id:205, content:'Giải quyết tranh chấp lối đi chung giữa bà Tạ Thị Kim Loan và ông Đoàn Ngọc Nam', doc:'339/UBND-NC ngày 29/04/2026', assignDate:'2026-04-29', dept:'KT', coord:'TP', deadline:'2026-05-29', priority:'cao', status:'dang', progress:30, note:'Đang điều tra xác minh', createdAt:'2026-04-29', history:[{date:'2026-04-29',action:'Tạo mới'}]},
+    {id:206, content:'Tổng hợp nhu cầu vốn đầu tư công trung hạn 2026-2030; trình Ban Thường vụ Đảng ủy xã trước 29/4/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'', deadline:'2026-04-29', priority:'cao', status:'hoan', progress:100, note:'Đã hoàn thành, đã trình Ban Thường vụ', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-04-29',action:'Đánh dấu hoàn thành'}]},
+    {id:207, content:'Xây dựng Kế hoạch thực hiện chỉ tiêu phát triển KTXH năm 2026 (thay thế KH 25/KH-UBND); hoàn thành trước 30/4/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'', deadline:'2026-04-30', priority:'cao', status:'hoan', progress:100, note:'Đã ban hành Kế hoạch mới', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-04-30',action:'Đánh dấu hoàn thành'}]},
+    {id:208, content:'Chủ trì đăng ký tham gia Chương trình MTQG; đảm bảo nội dung sát thực tế, khả thi; hoàn thành trước 30/4/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'VH,TC', deadline:'2026-04-30', priority:'cao', status:'hoan', progress:100, note:'Đã hoàn thành đăng ký', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-04-30',action:'Đánh dấu hoàn thành'}]},
+    {id:209, content:'Xây dựng Kế hoạch đấu giá quyền sử dụng đất năm 2026; trình Ban Thường vụ Đảng ủy xem xét; hoàn thành trước 30/4/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'', deadline:'2026-04-30', priority:'cao', status:'hoan', progress:100, note:'Đã xây dựng Kế hoạch đấu giá', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-04-30',action:'Đánh dấu hoàn thành'}]},
+    {id:210, content:'Tăng cường quản lý trật tự xây dựng; hướng dẫn cấp phép xây dựng; tuyên truyền quy định đăng ký xây dựng; hoàn thành trước 08/5/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'', deadline:'2026-05-08', priority:'tb', status:'dang', progress:70, note:'Đã soạn thảo văn bản hướng dẫn', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'}]},
+    {id:211, content:'Làm việc với UBND xã Ia Nan về sửa chữa Đài tưởng niệm, Nhà sinh hoạt cộng đồng làng Bi và thôn Ia Mút; hoàn thành trước 08/5/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'KT', coord:'', deadline:'2026-05-08', priority:'tb', status:'dang', progress:50, note:'Đang làm việc với UBND xã Ia Nan', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'}]},
+    {id:212, content:'Rà soát, đề xuất chuyển đổi cao su chết, kém phát triển sang dự án khác; phối hợp Sở Tài chính thẩm định; hoàn thành trước 25/5/2026', doc:'5680/UBND-NNMT ngày 07/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'DC', deadline:'2026-05-25', priority:'tb', status:'chua', progress:0, note:'', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:213, content:'Tham gia góp ý dự thảo Thông tư quy định chế độ quản lý tài sản kết cấu hạ tầng; gửi Sở Tài chính trước 09/5/2026', doc:'4214/STC-QLGCS ngày 07/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'', deadline:'2026-05-09', priority:'tb', status:'hoan', progress:100, note:'Đã gửi văn bản góp ý', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'},{date:'2026-05-09',action:'Đánh dấu hoàn thành'}]},
+    {id:214, content:'Báo cáo công tác bảo vệ kết cấu hạ tầng giao thông đường bộ gửi Sở Xây dựng trước 15/5/2026; chuẩn bị đón đoàn kiểm tra đợt 1 (18-22/5)', doc:'42/KH-SXD ngày 06/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'', deadline:'2026-05-15', priority:'cao', status:'dang', progress:30, note:'Đang chuẩn bị báo cáo và hồ sơ', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:215, content:'Tham gia góp ý Nghị quyết hỗ trợ hỏa táng; gửi Sở Xây dựng trước 10/5/2026', doc:'3474/SXD-HTKT ngày 07/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'', deadline:'2026-05-10', priority:'thap', status:'hoan', progress:100, note:'Đã gửi góp ý', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'},{date:'2026-05-10',action:'Đánh dấu hoàn thành'}]},
+    {id:216, content:'Mở tài khoản "Thu, nộp Quỹ phòng, chống thiên tai tỉnh"; gửi thông tin tài khoản về Quỹ PCTT tỉnh', doc:'22/CVDI-CCTL ngày 06/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'TC', deadline:'', priority:'tb', status:'dang', progress:40, note:'Đang thực hiện thủ tục mở tài khoản', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:217, content:'Đăng ký phát triển vùng trồng dược liệu quý; rà soát điều kiện địa hình, xác định diện tích, tổng hợp hộ dân có nhu cầu; báo cáo Sở Y tế trước 17h 15/5/2026', doc:'3294/SYT-NVD ngày 07/05/2026', assignDate:'2026-05-07', dept:'KT', coord:'', deadline:'2026-05-15', priority:'tb', status:'dang', progress:20, note:'Đang khảo sát thực địa', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:218, content:'Xây dựng bảng theo dõi tiến độ nhiệm vụ các đơn vị từ các cuộc họp UBND xã; báo cáo lãnh đạo 08h thứ Năm hàng tuần; hoàn thành trong tháng 4/2026', doc:'50/TB-UBND ngày 28/4/2026', assignDate:'2026-04-28', dept:'VP', coord:'', deadline:'2026-04-30', priority:'cao', status:'hoan', progress:100, note:'Đã hoàn thành và đang vận hành', createdAt:'2026-04-28', history:[{date:'2026-04-28',action:'Tạo mới'},{date:'2026-04-30',action:'Đánh dấu hoàn thành'}]},
+    // ── VĂN PHÒNG HĐND VÀ UBND ───────────────────────────────────────────
+    {id:301, content:'Thực hiện CCHC, tiếp dân, giải quyết khiếu nại tố cáo; tham dự hội nghị trực tuyến đầy đủ; chuẩn bị tốt các cuộc họp', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'VP', coord:'', deadline:'', priority:'tb', status:'dang', progress:70, note:'Thực hiện thường xuyên', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:302, content:'Phát huy vai trò dẫn dắt, cải cách hành chính theo tinh thần Chủ động - Trách nhiệm - Tốc độ; chuyển từ quản lý mệnh lệnh sang quản trị kết quả', doc:'184/TB-UBND ngày 19/3/2026', assignDate:'2026-03-19', dept:'VP', coord:'HC', deadline:'', priority:'tb', status:'dang', progress:60, note:'Đang triển khai', createdAt:'2026-03-19', history:[{date:'2026-03-19',action:'Tạo mới'}]},
+    {id:303, content:'Thực hiện đầy đủ nhiệm vụ KT-XH quý II/2026; tăng cường giải ngân đầu tư công; cải cách hành chính; giải quyết TTHC không để tồn đọng', doc:'287/TB-UBND ngày 14/4/2026', assignDate:'2026-04-14', dept:'VP', coord:'KT,HC', deadline:'', priority:'cao', status:'dang', progress:50, note:'Đang triển khai', createdAt:'2026-04-14', history:[{date:'2026-04-14',action:'Tạo mới'}]},
+    {id:304, content:'Rà soát, thống kê đội ngũ công chức tư pháp địa phương; báo cáo qua link Google Sheets trước 17h ngày 07/5/2026', doc:'1497/STP-VP ngày 07/05/2026', assignDate:'2026-05-07', dept:'VP', coord:'TP', deadline:'2026-05-07', priority:'cao', status:'hoan', progress:100, note:'Đã gửi báo cáo lúc 14h50 cùng ngày', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'},{date:'2026-05-07',action:'Đánh dấu hoàn thành'}]},
+    {id:305, content:'Hoàn chỉnh Quy chế làm việc UBND xã, trình Chủ tịch ký ban hành; xây dựng phân công nhiệm vụ Chủ tịch, Phó Chủ tịch, Ủy viên UBND xã', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'VP', coord:'', deadline:'2026-04-20', priority:'cao', status:'hoan', progress:100, note:'Đã ban hành Quy chế làm việc', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-18',action:'Đánh dấu hoàn thành'}]},
+    {id:306, content:'Cập nhật, hoàn thiện báo cáo Quý I gửi Văn phòng UBND xã tổng hợp trước 15/4/2026', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'VP', coord:'KT,VH,HC,CA,QS', deadline:'2026-04-15', priority:'cao', status:'hoan', progress:100, note:'Đã tổng hợp báo cáo Quý I đúng hạn', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-15',action:'Đánh dấu hoàn thành'}]},
+    {id:307, content:'Tham mưu UBND xã trình Ban Thường vụ Đảng ủy xem xét Tờ trình thành lập trường phổ thông nội trú; Tờ trình điều chỉnh chỉ tiêu KTXH 2026', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'VP', coord:'KT,VH', deadline:'2026-05-15', priority:'cao', status:'dang', progress:60, note:'Đang hoàn thiện hồ sơ trình Ban Thường vụ', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'}]},
+    // ── TRUNG TÂM PVHCC ──────────────────────────────────────────────────
+    {id:401, content:'Phát huy hiệu quả TT PVHCC trong giải quyết hồ sơ cho người dân; thực hiện CCHC, tiếp nhận giải quyết TTHC cơ chế một cửa liên thông', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'HC', coord:'VP', deadline:'', priority:'cao', status:'dang', progress:70, note:'Đang vận hành, xử lý hồ sơ hàng ngày', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:402, content:'Triển khai DVC trực tuyến mức độ cao; ứng dụng nền tảng số; chuyển đổi từ quản lý mệnh lệnh sang quản trị kết quả; phát huy Tổ công nghệ số', doc:'184/TB-UBND ngày 19/3/2026', assignDate:'2026-03-19', dept:'HC', coord:'VP', deadline:'', priority:'cao', status:'dang', progress:55, note:'Đang triển khai chuyển đổi số', createdAt:'2026-03-19', history:[{date:'2026-03-19',action:'Tạo mới'}]},
+    {id:403, content:'Nâng cao chất lượng cung cấp DVC; chấm dứt né tránh đùn đẩy trách nhiệm; xây dựng chính quyền gần dân sát dân; tăng cường kỷ luật kỷ cương', doc:'287/TB-UBND ngày 14/4/2026', assignDate:'2026-04-14', dept:'HC', coord:'', deadline:'', priority:'cao', status:'dang', progress:65, note:'Đang thực hiện thường xuyên', createdAt:'2026-04-14', history:[{date:'2026-04-14',action:'Tạo mới'}]},
+    {id:404, content:'Cập nhật, hoàn thiện báo cáo Quý I gửi VP HĐND và UBND tổng hợp trước 15/4/2026', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'HC', coord:'VP', deadline:'2026-04-15', priority:'tb', status:'hoan', progress:100, note:'Đã gửi đúng hạn', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-14',action:'Đánh dấu hoàn thành'}]},
+    // ── CÔNG AN XÃ ───────────────────────────────────────────────────────
+    {id:501, content:'Triển khai quyết liệt giải pháp giữ vững ANCT, TTATXH; giảm thiểu tai nạn giao thông; phòng chống cháy nổ; tiếp công dân giải quyết khiếu nại tố cáo', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'CA', coord:'QS', deadline:'', priority:'cao', status:'dang', progress:70, note:'Thực hiện thường xuyên', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:502, content:'Phát huy vai trò dẫn dắt trong CCHC, CĐS theo tinh thần Chủ động - Trách nhiệm - Tốc độ; triển khai Đề án 06; hỗ trợ người dân sử dụng dịch vụ công', doc:'184/TB-UBND ngày 19/3/2026', assignDate:'2026-03-19', dept:'CA', coord:'', deadline:'', priority:'tb', status:'dang', progress:60, note:'Đang triển khai Đề án 06', createdAt:'2026-03-19', history:[{date:'2026-03-19',action:'Tạo mới'}]},
+    {id:503, content:'Giữ vững ANCT TTATXH; tăng cường tiếp công dân; giải quyết khiếu nại tố cáo; triển khai giải pháp giảm TNGT, phòng chống cháy nổ', doc:'287/TB-UBND ngày 14/4/2026', assignDate:'2026-04-14', dept:'CA', coord:'', deadline:'', priority:'cao', status:'dang', progress:65, note:'Thực hiện thường xuyên', createdAt:'2026-04-14', history:[{date:'2026-04-14',action:'Tạo mới'}]},
+    {id:504, content:'Tham gia góp ý dự thảo Quyết định của UBND tỉnh Gia Lai; gửi Công an tỉnh trước 16/5/2026', doc:'5178/CAT-PV01 ngày 07/05/2026', assignDate:'2026-05-07', dept:'CA', coord:'', deadline:'2026-05-16', priority:'tb', status:'dang', progress:20, note:'Đang nghiên cứu dự thảo', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:505, content:'Nghiên cứu, quán triệt Hướng dẫn tiêu chí ANTT thuộc Bộ tiêu chí nông thôn mới 2026-2030; tập trung đạt chỉ tiêu ANTT trong xét công nhận NTM', doc:'5191/PV01 ngày 08/05/2026', assignDate:'2026-05-08', dept:'CA', coord:'VP', deadline:'', priority:'cao', status:'dang', progress:30, note:'Đang nghiên cứu, tham mưu cấp ủy triển khai', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    {id:506, content:'Triển khai Chiến lược dữ liệu tỉnh; rà soát chuẩn hóa CSDL; kết nối chia sẻ dữ liệu; báo cáo PC06 Công an tỉnh trước 10/5/2026', doc:'5195/CAT-PC06 ngày 07/05/2026', assignDate:'2026-05-07', dept:'CA', coord:'', deadline:'2026-05-10', priority:'cao', status:'qua', progress:0, note:'Đã quá hạn - cần xử lý khẩn', createdAt:'2026-05-07', history:[{date:'2026-05-07',action:'Tạo mới'}]},
+    {id:507, content:'Cập nhật, hoàn thiện báo cáo Quý I gửi VP HĐND và UBND tổng hợp trước 15/4/2026', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'CA', coord:'VP', deadline:'2026-04-15', priority:'tb', status:'hoan', progress:100, note:'Đã gửi đúng hạn', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-14',action:'Đánh dấu hoàn thành'}]},
+    {id:508, content:'Phối hợp với Phòng VH-XH cập nhật dữ liệu thông tin trẻ em trên Hệ thống quản lý thông tin trẻ em; phối hợp bộ phận tư pháp, trạm y tế rà soát danh sách', doc:'3336/SYT-BTXHTE ngày 07/05/2026', assignDate:'2026-05-08', dept:'CA', coord:'VH,TP', deadline:'2026-06-30', priority:'tb', status:'chua', progress:0, note:'', createdAt:'2026-05-08', history:[{date:'2026-05-08',action:'Tạo mới'}]},
+    // ── BAN CHỈ HUY QUÂN SỰ ─────────────────────────────────────────────
+    {id:601, content:'Triển khai quyết liệt giải pháp giữ vững ANCT, TTATXH trên địa bàn; phối hợp Công an xã trong công tác đảm bảo an ninh trật tự', doc:'143/TB-UBND ngày 06/3/2026', assignDate:'2026-03-06', dept:'QS', coord:'CA', deadline:'', priority:'cao', status:'dang', progress:65, note:'Thực hiện thường xuyên', createdAt:'2026-03-06', history:[{date:'2026-03-06',action:'Tạo mới'}]},
+    {id:602, content:'Phát huy vai trò lãnh đạo trong CCHC, CĐS; triển khai NQ 57-NQ/TW và Đề án 06 gắn tinh thần Chủ động - Trách nhiệm - Tốc độ', doc:'184/TB-UBND ngày 19/3/2026', assignDate:'2026-03-19', dept:'QS', coord:'', deadline:'', priority:'tb', status:'dang', progress:50, note:'Đang triển khai', createdAt:'2026-03-19', history:[{date:'2026-03-19',action:'Tạo mới'}]},
+    {id:603, content:'Giữ vững ANCT TTATXH; tiếp công dân giải quyết khiếu nại tố cáo; phối hợp phòng chống cháy nổ, tai nạn giao thông', doc:'287/TB-UBND ngày 14/4/2026', assignDate:'2026-04-14', dept:'QS', coord:'CA', deadline:'', priority:'cao', status:'dang', progress:60, note:'Thực hiện thường xuyên', createdAt:'2026-04-14', history:[{date:'2026-04-14',action:'Tạo mới'}]},
+    {id:604, content:'Chủ động trao đổi với Bộ CHQ Sự tỉnh về công tác diễn tập năm 2026; xây dựng kế hoạch thời gian, chương trình, kinh phí; báo cáo UBND xã', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'QS', coord:'', deadline:'2026-05-30', priority:'cao', status:'dang', progress:35, note:'Đang trao đổi với Bộ CHQS tỉnh', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'}]},
+    {id:605, content:'Phối hợp với Phòng Kinh tế rà soát đề xuất nội dung hạng mục sửa chữa trụ sở Trung đội Dân quân thường trực; tham mưu trình Ban Thường vụ Đảng ủy', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'QS', coord:'KT', deadline:'2026-04-30', priority:'tb', status:'hoan', progress:100, note:'Đã hoàn thiện hồ sơ, đã trình Ban Thường vụ', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-28',action:'Đánh dấu hoàn thành'}]},
+    {id:606, content:'Cập nhật, hoàn thiện báo cáo Quý I gửi VP HĐND và UBND tổng hợp trước 15/4/2026', doc:'44/TB-UBND ngày 10/4/2026', assignDate:'2026-04-10', dept:'QS', coord:'VP', deadline:'2026-04-15', priority:'tb', status:'hoan', progress:100, note:'Đã gửi đúng hạn', createdAt:'2026-04-10', history:[{date:'2026-04-10',action:'Tạo mới'},{date:'2026-04-14',action:'Đánh dấu hoàn thành'}]},
   ];
   saveTasks();
 }
@@ -1533,8 +1595,9 @@ updateStats();
 renderTable();
 renderDashboard();
 renderDepts();
+updateRoleBadge();
+updateAdminUI();
 setTimeout(function(){ buildMiniDonut(); buildMiniDept(); }, 120);
 </script>
 </body>
 </html>
-
