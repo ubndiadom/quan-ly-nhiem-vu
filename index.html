@@ -246,6 +246,64 @@ textarea.fc{resize:vertical;min-height:75px}
 .cfm-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
 @media(max-width:768px){.hm{display:none}.main{padding:12px 9px 36px}.sg{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:480px){.sg{grid-template-columns:repeat(2,1fr)}.kb{grid-template-columns:1fr}.dg{grid-template-columns:1fr}}
+/* SERVER STATUS */
+.server-status{
+  position:fixed;
+  top:92px;
+  right:16px;
+  z-index:3000;
+  background:var(--navy);
+  color:#fff;
+  border-radius:999px;
+  padding:9px 14px;
+  font-size:12px;
+  font-weight:600;
+  box-shadow:var(--shl);
+  display:none;
+  align-items:center;
+  gap:8px;
+}
+.server-status.show{display:flex}
+.server-spinner{
+  width:14px;
+  height:14px;
+  border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:600px){
+  .server-status{
+    top:auto;
+    bottom:14px;
+    left:14px;
+    right:14px;
+    justify-content:center;
+    border-radius:12px;
+  }
+}
+
+/* MOBILE ACTION BUTTONS */
+@media(max-width:600px){
+  .acell{
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  .acell .btn{
+    min-width:34px;
+    min-height:34px;
+    justify-content:center;
+    padding:7px 9px;
+  }
+  tbody td{
+    padding:9px 8px;
+  }
+  .tw{
+    -webkit-overflow-scrolling:touch;
+  }
+}
 </style>
 </head>
 <body>
@@ -275,7 +333,10 @@ textarea.fc{resize:vertical;min-height:75px}
     <div class="nt" onclick="swTab('reminders')">&#128276; Nhắc việc</div>
   </nav>
 </header>
-
+<div id="serverStatus" class="server-status">
+  <span class="server-spinner"></span>
+  <span id="serverStatusText">Đang xử lý...</span>
+</div>
 <div class="main">
 
 <!-- DASHBOARD -->
@@ -582,6 +643,21 @@ async function loadTasks() {
   return loadData();
 }
 
+function showServerStatus(message) {
+  var box = document.getElementById('serverStatus');
+  var txt = document.getElementById('serverStatusText');
+  if (!box || !txt) return;
+
+  txt.textContent = message || 'Đang xử lý...';
+  box.classList.add('show');
+}
+
+function hideServerStatus() {
+  var box = document.getElementById('serverStatus');
+  if (!box) return;
+  box.classList.remove('show');
+}
+
 function setSaving(flag, message) {
   isSaving = !!flag;
 
@@ -591,8 +667,10 @@ function setSaving(flag, message) {
     buttons[i].disabled = !!flag;
   }
 
-  if (flag && message) {
-    showToast(message, 'info');
+  if (flag) {
+    showServerStatus(message || 'Đang xử lý...');
+  } else {
+    hideServerStatus();
   }
 }
 
@@ -622,6 +700,8 @@ function getCurrentUserName() {
 }
 
 async function loadData() {
+  showServerStatus('Đang tải dữ liệu...');
+
   try {
     var url = GAS_URL + '?action=getTasks&t=' + Date.now();
 
@@ -646,6 +726,9 @@ async function loadData() {
     console.error(err);
     showToast('Không tải được dữ liệu từ máy chủ. Vui lòng kiểm tra kết nối.', 'error');
     return [];
+
+  } finally {
+    hideServerStatus();
   }
 }
 
@@ -1858,7 +1941,9 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ─── SAMPLE DATA ──────────────────────────────────────────────────────
-function initSampleData() {
+function initSampleData() {  
+  console.warn('initSampleData() đã bị vô hiệu hóa. Dữ liệu chính thức đang lấy từ Google Sheets.');
+  return;
   var now = new Date();
   function d(s) { return s; } // date string YYYY-MM-DD
   tasks = [
