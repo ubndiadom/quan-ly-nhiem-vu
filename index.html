@@ -304,6 +304,73 @@ textarea.fc{resize:vertical;min-height:75px}
     -webkit-overflow-scrolling:touch;
   }
 }
+/* SERVER LOGS IN DETAIL MODAL */
+.log-box{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.log-loading{
+  font-size:12px;
+  color:var(--muted);
+  padding:10px;
+  background:#f7f9fc;
+  border-radius:8px;
+}
+.log-item{
+  background:#f7f9fc;
+  border-left:3px solid var(--navy);
+  border-radius:8px;
+  padding:9px 11px;
+}
+.log-item.create{border-left-color:var(--ok)}
+.log-item.update{border-left-color:var(--info)}
+.log-item.delete{border-left-color:var(--err)}
+.log-top{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:4px;
+}
+.log-action{
+  font-size:11px;
+  font-weight:800;
+  color:var(--navy);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.log-time{
+  font-size:10px;
+  color:var(--muted);
+}
+.log-by{
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+.log-change{
+  font-size:12px;
+  line-height:1.5;
+}
+.log-field{
+  font-weight:700;
+  color:var(--navy);
+}
+.log-old{
+  color:var(--err);
+}
+.log-new{
+  color:var(--ok);
+}
+.log-empty{
+  font-size:12px;
+  color:var(--muted);
+  padding:10px;
+  background:#f7f9fc;
+  border-radius:8px;
+  text-align:center;
+}
 </style>
 </head>
 <body>
@@ -751,7 +818,155 @@ function findTaskById(id) {
   }
   return null;
 }
+function escapeHtml(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
+function fmtDateTime(s) {
+  if (!s) return '--';
+
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return escapeHtml(s);
+
+  return zp(d.getDate()) + '/' + zp(d.getMonth() + 1) + '/' + d.getFullYear()
+    + ' ' + zp(d.getHours()) + ':' + zp(d.getMinutes());
+}
+
+function logActionLabel(action) {
+  if (action === 'create') return 'Tạo mới';
+  if (action === 'update') return 'Cập nhật';
+  if (action === 'delete') return 'Xóa mềm';
+  return action || '--';
+}
+
+function fieldLabel(field) {
+  var map = {
+    '*': 'Toàn bộ nhiệm vụ',
+    content: 'Nội dung nhiệm vụ',
+    doc: 'Văn bản',
+    assignDate: 'Ngày giao',
+    dept: 'Đơn vị chủ trì',
+    coord: 'Đơn vị phối hợp',
+    deadline: 'Hạn hoàn thành',
+    priority: 'Mức ưu tiên',
+    status: 'Trạng thái',
+    progress: 'Tiến độ',
+    note: 'Ghi chú',
+    isDeleted: 'Xóa mềm'
+  };
+
+  return map[field] || field || '--';
+}
+
+function displayLogValue(field, value) {
+  if (value === undefined || value === null || value === '') return '—';
+
+  var text = String(value);
+
+  if (field === 'dept') return deptLabel(text);
+  if (field === 'priority') return priLabel(text);
+  if (field === 'status') return statusLabel(text);
+
+  if (field === 'assignDate' || field === 'deadline') {
+    return fmtDate(text);
+  }
+
+  if (text.length > 160) {
+    return text.slice(0, 160) + '...';
+  }
+
+  return text;
+}
+
+async function loadTaskLogs(taskId) {
+  try {
+    var url = GAS_URL
+      + '?action=getLogs&taskId=' + encodeURIComponent(taskId)
+      + '&limit=100&t=' + Date.now();
+
+    var res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store'
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    var result = await res.json();
+
+    if (!result.success) {
+      throw new Error(result.message || 'Không tải được lịch sử.');
+    }
+
+    return Array.isArray(result.data) ? result.data : [];
+
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+async function renderTaskLogsIntoDetail(taskId) {
+  var box = document.getElementById('serverLogBox');
+  if (!box) return;
+
+  box.innerHTML = '<div class="log-loading">Đang tải lịch sử cập nhật...</div>';
+
+  var logs = await loadTaskLogs(taskId);
+
+  if (logs === null) {
+    box.innerHTML = '<div class="log-empty">Không tải được lịch sử cập nhật.</div>';
+    return;
+  }
+
+  if (!logs.length) {
+    box.innerHTML = '<div class="log-empty">Chưa có lịch sử cập nhật.</div>';
+    return;
+  }
+
+  var html = '';
+
+  for (var i = 0; i < logs.length; i++) {
+    var l = logs[i];
+    var action = String(l.action || '');
+    var field = String(l.field || '');
+
+    var oldValue = displayLogValue(field, l.oldValue);
+    var newValue = displayLogValue(field, l.newValue);
+
+    var changeHtml = '';
+
+    if (action === 'create') {
+      changeHtml = 'Tạo nhiệm vụ mới.';
+    } else if (action === 'delete') {
+      changeHtml = 'Đánh dấu nhiệm vụ là đã xóa.';
+    } else {
+      changeHtml =
+        '<span class="log-field">' + escapeHtml(fieldLabel(field)) + '</span>: '
+        + '<span class="log-old">' + escapeHtml(oldValue) + '</span>'
+        + ' → '
+        + '<span class="log-new">' + escapeHtml(newValue) + '</span>';
+    }
+
+    html += ''
+      + '<div class="log-item ' + escapeHtml(action) + '">'
+      +   '<div class="log-top">'
+      +     '<div class="log-action">' + escapeHtml(logActionLabel(action)) + '</div>'
+      +     '<div class="log-time">' + fmtDateTime(l.timestamp) + '</div>'
+      +   '</div>'
+      +   '<div class="log-by">Người cập nhật: <strong>' + escapeHtml(l.by || 'unknown') + '</strong>'
+      +     (l.version ? ' &middot; Phiên bản: ' + escapeHtml(l.version) : '')
+      +   '</div>'
+      +   '<div class="log-change">' + changeHtml + '</div>'
+      + '</div>';
+  }
+
+  box.innerHTML = html;
+}
 function upsertLocalTask(task) {
   if (!task) return;
 
@@ -1751,34 +1966,40 @@ function checkPin() {
 // ─── DETAIL ───────────────────────────────────────────────────────────
 function openDetail(id) {
   var t = null;
-  for (var i = 0; i < tasks.length; i++) { if (tasks[i].id === id) { t = tasks[i]; break; } }
+  for (var i = 0; i < tasks.length; i++) {
+    if (String(tasks[i].id) === String(id)) {
+      t = tasks[i];
+      break;
+    }
+  }
   if (!t) return;
+
   var s = getStatus(t);
   var dl = dlInfo(t);
   var pc = getPct(t);
   var pp = t.priority || 'tb';
   var priCls = pp === 'cao' ? 'priH' : pp === 'thap' ? 'priL' : 'priM';
 
-  var hist = '';
-  if (t.history && t.history.length) {
-    var rev = t.history.slice().reverse();
-    for (var hi = 0; hi < rev.length; hi++) {
-      hist += '<div class="tli"><div class="tldot"></div><div class="tldt">' + fmtDate(rev[hi].date) + '</div><div class="tltx">' + rev[hi].action + '</div></div>';
-    }
-    hist = '<div class="divider"></div><div class="dtl-sec"><div class="dtl-t">Lịch sử</div><div class="tl">' + hist + '</div></div>';
-  }
+   var hist =
+    '<div class="divider"></div>'
+    + '<div class="dtl-sec">'
+    + '<div class="dtl-t">Lịch sử cập nhật</div>'
+    + '<div class="log-box" id="serverLogBox">'
+    + '<div class="log-loading">Đang tải lịch sử cập nhật...</div>'
+    + '</div>'
+    + '</div>';
 
   document.getElementById('detailBody').innerHTML =
     '<div class="dtl-sec">'
-    + '<div style="font-size:14px;font-weight:700;line-height:1.5;margin-bottom:10px">' + t.content + '</div>'
+    + '<div style="font-size:14px;font-weight:700;line-height:1.5;margin-bottom:10px">' + escapeHtml(t.content) + '</div>'
     + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">'
     + '<span class="' + badgeCls(s) + '">' + statusLabel(s) + '</span>'
     + '<span class="tag">&#127919; ' + priLabel(pp) + '</span>'
-    + (t.doc ? '<span class="tag">&#128196; ' + t.doc + '</span>' : '')
+    + (t.doc ? '<span class="tag">&#128196; ' + escapeHtml(t.doc) + '</span>' : '')
     + '</div>'
     + '<div class="dtl-g">'
     + '<div class="dtl-i"><label>Đơn vị chủ trì</label><p>&#128204; ' + deptLabel(t.dept) + '</p></div>'
-    + '<div class="dtl-i"><label>Đơn vị phối hợp</label><p>&#129309; ' + (t.coord || '--') + '</p></div>'
+    + '<div class="dtl-i"><label>Đơn vị phối hợp</label><p>&#129309; ' + escapeHtml(t.coord || '--') + '</p></div>'
     + '<div class="dtl-i"><label>Ngày giao</label><p>&#128197; ' + fmtDate(t.assignDate) + '</p></div>'
     + '<div class="dtl-i"><label>Hạn hoàn thành</label><p class="' + dl.cls + '">&#128197; ' + fmtDate(t.deadline) + '</p></div>'
     + '</div></div>'
@@ -1788,7 +2009,7 @@ function openDetail(id) {
     + '<div style="flex:1"><div class="pb" style="height:10px"><div class="pbf" style="width:' + pc + '%"></div></div></div>'
     + '<div style="font-size:20px;font-weight:900;color:var(--navy)">' + pc + '%</div>'
     + '</div></div>'
-    + (t.note ? '<div class="divider"></div><div class="dtl-sec"><div class="dtl-t">Ghi chú</div><p style="font-size:13px;line-height:1.7">' + t.note + '</p></div>' : '')
+    + (t.note ? '<div class="divider"></div><div class="dtl-sec"><div class="dtl-t">Ghi chú</div><p style="font-size:13px;line-height:1.7">' + escapeHtml(t.note) + '</p></div>' : '')
     + hist;
 
   document.getElementById('detailFoot').innerHTML =
@@ -1798,6 +2019,7 @@ function openDetail(id) {
     + (isAdmin ? '<button class="btn b-rd" onclick="delTask(' + t.id + ')">&#128465; Xóa</button>' : '');
 
   document.getElementById('detailModal').classList.add('open');
+  renderTaskLogsIntoDetail(t.id);
 }
 function closeDetail() { document.getElementById('detailModal').classList.remove('open'); }
 
