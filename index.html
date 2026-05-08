@@ -203,6 +203,45 @@ textarea.fc{resize:vertical;min-height:75px}
 .panel{background:var(--white);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
 .pnh{padding:13px 16px;color:#fff;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
 .pnb{padding:12px}
+/* ROLE BADGE */
+.role-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0}
+.role-view{background:rgba(255,255,255,.15);color:rgba(255,255,255,.85);border:1.5px solid rgba(255,255,255,.25)}
+.role-view:hover{background:rgba(255,255,255,.25)}
+.role-admin{background:var(--gold);color:var(--navy);border:1.5px solid var(--gold-light)}
+.role-admin:hover{background:var(--gold-light)}
+/* PIN MODAL */
+.pin-overlay{position:fixed;inset:0;background:rgba(26,39,68,.65);backdrop-filter:blur(6px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;opacity:0;pointer-events:none;transition:opacity .25s}
+.pin-overlay.open{opacity:1;pointer-events:all}
+.pin-box{background:#fff;border-radius:20px;width:100%;max-width:360px;box-shadow:0 24px 80px rgba(26,39,68,.3);transform:translateY(20px);transition:transform .25s;overflow:hidden}
+.pin-overlay.open .pin-box{transform:translateY(0)}
+.pin-head{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:22px;text-align:center}
+.pin-head .pi{font-size:36px;margin-bottom:8px}
+.pin-head h3{font-size:17px;font-weight:700;margin-bottom:4px}
+.pin-head p{font-size:11px;opacity:.75}
+.pin-body{padding:24px}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:20px}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:var(--border);transition:all .2s}
+.pin-dot.filled{background:var(--navy);transform:scale(1.15)}
+.pin-dot.error{background:var(--err);animation:shake .4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pin-key{padding:14px;border:1.5px solid var(--border);border-radius:10px;background:#fafbfe;font-family:inherit;font-size:18px;font-weight:700;color:var(--navy);cursor:pointer;transition:all .15s;text-align:center}
+.pin-key:hover{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pin-key:active{transform:scale(.94)}
+.pin-key.del{font-size:14px;color:var(--muted)}
+.pin-key.del:hover{background:var(--err);color:#fff;border-color:var(--err)}
+.pin-err{text-align:center;color:var(--err);font-size:12px;font-weight:600;margin-bottom:10px;min-height:18px}
+/* CONFIRM MODAL */
+.cfm-overlay{position:fixed;inset:0;background:rgba(26,39,68,.55);backdrop-filter:blur(4px);z-index:1500;display:flex;align-items:center;justify-content:center;padding:14px;opacity:0;pointer-events:none;transition:opacity .25s}
+.cfm-overlay.open{opacity:1;pointer-events:all}
+.cfm-box{background:#fff;border-radius:16px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(26,39,68,.25);transform:translateY(16px);transition:transform .25s;overflow:hidden}
+.cfm-overlay.open .cfm-box{transform:translateY(0)}
+.cfm-head{background:linear-gradient(135deg,#922b21,#c0392b);color:#fff;padding:18px 20px;display:flex;align-items:center;gap:10px}
+.cfm-head .ci{font-size:24px}.cfm-head h3{font-size:15px;font-weight:700}
+.cfm-body{padding:18px 20px}
+.cfm-body p{font-size:13px;color:var(--text);line-height:1.6;margin-bottom:4px}
+.cfm-body .ctask{font-weight:700;color:var(--navy);font-size:13px;margin-top:6px;background:#f0f3fa;padding:8px 10px;border-radius:8px;border-left:3px solid var(--navy)}
+.cfm-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
 @media(max-width:768px){.hm{display:none}.main{padding:12px 9px 36px}.sg{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:480px){.sg{grid-template-columns:repeat(2,1fr)}.kb{grid-template-columns:1fr}.dg{grid-template-columns:1fr}}
 </style>
@@ -220,6 +259,9 @@ textarea.fc{resize:vertical;min-height:75px}
       <span class="big" id="clock">--:--</span>
       <span class="sm" id="dateStr">--/--/----</span>
     </div>
+    <button class="role-badge role-view" id="roleBadge" onclick="toggleRole()" title="Nhấn để đăng nhập Quản trị">
+      &#128065; Chế độ Xem
+    </button>
   </div>
   <nav class="nav">
     <div class="nt active" onclick="swTab('dashboard')">&#128202; Tổng quan</div>
@@ -257,7 +299,7 @@ textarea.fc{resize:vertical;min-height:75px}
 <section class="sec" id="sec-depts">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
     <div style="font-weight:700;font-size:16px;color:var(--navy)">&#127970; Theo dõi tiến độ theo đơn vị</div>
-    <button class="btn b-pr" onclick="openModal(0)">&#10133; Thêm nhiệm vụ</button>
+    <button class="btn b-pr" onclick="openModal(0)" id="btnAddDept">&#10133; Thêm nhiệm vụ</button>
   </div>
   <div class="dg" id="deptGrid"></div>
 </section>
@@ -407,8 +449,62 @@ textarea.fc{resize:vertical;min-height:75px}
 
 <div class="tsc" id="tc"></div>
 
+<!-- PIN MODAL -->
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-box">
+    <div class="pin-head">
+      <div class="pi">&#128274;</div>
+      <h3>Đăng nhập Quản trị</h3>
+      <p>Nhập mã PIN 4 số để vào chế độ quản trị</p>
+    </div>
+    <div class="pin-body">
+      <div class="pin-dots" id="pinDots">
+        <div class="pin-dot" id="pd0"></div>
+        <div class="pin-dot" id="pd1"></div>
+        <div class="pin-dot" id="pd2"></div>
+        <div class="pin-dot" id="pd3"></div>
+      </div>
+      <div class="pin-err" id="pinErr"></div>
+      <div class="pin-pad">
+        <button class="pin-key" onclick="pinPress('1')">1</button>
+        <button class="pin-key" onclick="pinPress('2')">2</button>
+        <button class="pin-key" onclick="pinPress('3')">3</button>
+        <button class="pin-key" onclick="pinPress('4')">4</button>
+        <button class="pin-key" onclick="pinPress('5')">5</button>
+        <button class="pin-key" onclick="pinPress('6')">6</button>
+        <button class="pin-key" onclick="pinPress('7')">7</button>
+        <button class="pin-key" onclick="pinPress('8')">8</button>
+        <button class="pin-key" onclick="pinPress('9')">9</button>
+        <button class="pin-key del" onclick="closePinModal()">Hủy</button>
+        <button class="pin-key" onclick="pinPress('0')">0</button>
+        <button class="pin-key del" onclick="pinDel()">&#9003;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE MODAL -->
+<div class="cfm-overlay" id="cfmOverlay">
+  <div class="cfm-box">
+    <div class="cfm-head"><div class="ci">&#128465;</div><h3>Xác nhận xóa nhiệm vụ</h3></div>
+    <div class="cfm-body">
+      <p>Bạn có chắc chắn muốn xóa nhiệm vụ này không?</p>
+      <p>Hành động này <strong>không thể hoàn tác</strong>.</p>
+      <div class="ctask" id="cfmTaskName"></div>
+    </div>
+    <div class="cfm-foot">
+      <button class="btn b-gr" onclick="closeCfm()">Hủy bỏ</button>
+      <button class="btn b-rd" onclick="cfmConfirm()">&#128465; Xóa nhiệm vụ</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── CONSTANTS ────────────────────────────────────────────────────────
+var ADMIN_PIN = '1357'; // ← Đổi mã PIN tại đây
+var isAdmin = false;
+var pendingDeleteId = 0;
+var pinBuffer = '';
 var DEPT_MAP = {
   'VP': 'Văn phòng HĐND và UBND',
   'KT': 'Phòng Kinh tế',
@@ -458,6 +554,14 @@ function saveAndRefresh() {
   renderDashboard();
   renderDepts();
   rebuildCharts();
+  updateAdminUI();
+}
+function updateAdminUI() {
+  // Ẩn/hiện các nút Thêm nhiệm vụ ở thanh toolbar
+  var addBtns = document.querySelectorAll('.admin-only');
+  for (var i = 0; i < addBtns.length; i++) {
+    addBtns[i].style.display = isAdmin ? '' : 'none';
+  }
 }
 
 // ─── CLOCK ────────────────────────────────────────────────────────────
@@ -647,7 +751,7 @@ function renderDepts() {
     html += '</div></div>'
       + '<div class="dcf">'
       + '<button class="btn b-pr b-sm" style="flex:1" onclick="filterDeptGo(\'' + cfg.key + '\')">&#128203; Xem tất cả</button>'
-      + '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + cfg.key + '\')">&#10133; Thêm</button>'
+      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + cfg.key + '\')">&#10133; Thêm</button>' : '')
       + '</div></div>';
   }
   document.getElementById('deptGrid').innerHTML = html;
@@ -938,8 +1042,8 @@ function renderTable() {
       + '<td class="hm"><span class="' + priCls + '">' + priLabel(pp) + '</span></td>'
       + '<td><div class="acell">'
       + '<button class="btn b-pr b-sm" onclick="openDetail(' + t.id + ')" title="Chi tiết">&#128065;</button>'
-      + '<button class="btn b-gr b-sm" onclick="openModal(' + t.id + ')" title="Sua">&#9997;</button>'
-      + '<button class="btn b-rd b-sm" onclick="delTask(' + t.id + ')" title="Xóa">&#128465;</button>'
+      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModal(' + t.id + ')" title="Chỉnh sửa">&#9997;</button>' : '')
+      + (isAdmin ? '<button class="btn b-rd b-sm" onclick="delTask(' + t.id + ')" title="Xóa">&#128465;</button>' : '')
       + '</div></td></tr>';
   }
   tb.innerHTML = html;
@@ -1017,8 +1121,8 @@ function renderReminders() {
       + ' &middot; <strong class="' + (isLate ? 'dllt' : 'dlwn') + '">' + (isLate ? 'Quá hạn ' + Math.abs(d) + ' ngày' : 'Còn ' + d + ' ngày') + '</strong></div>'
       + (t.note ? '<div style="font-size:11px;margin-top:3px;color:var(--muted)">&#128221; ' + t.note + '</div>' : '')
       + '<div class="rma">'
-      + '<button class="btn b-pr b-sm" onclick="openModal(' + t.id + ')">&#9997; Cập nhật</button>'
-      + '<button class="btn b-gn b-sm" onclick="markDone(' + t.id + ')">&#9989; Hoàn thành</button>'
+      + (isAdmin ? '<button class="btn b-pr b-sm" onclick="openModal(' + t.id + ')">&#9997; Cập nhật</button>' : '')
+      + (isAdmin ? '<button class="btn b-gn b-sm" onclick="markDone(' + t.id + ')">&#9989; Hoàn thành</button>' : '')
       + '<button class="btn b-gr b-sm" onclick="openDetail(' + t.id + ')">&#128065; Chi tiết</button>'
       + '</div></div></div>';
   }
@@ -1041,6 +1145,7 @@ function markDone(id) {
 
 // ─── MODAL ────────────────────────────────────────────────────────────
 function openModal(id) {
+  if (!isAdmin) { showToast('Cần quyền Quản trị để thêm hoặc chỉnh sửa nhiệm vụ', 'error'); return; }
   editId = id || 0;
   document.getElementById('modalTitle').textContent = id ? 'Chỉnh sửa nhiệm vụ' : 'Thêm nhiệm vụ mới';
   if (id) {
@@ -1114,10 +1219,94 @@ function saveTask() {
 }
 
 function delTask(id) {
-  if (!confirm('Xóa nhiệm vụ này?')) return;
-  tasks = tasks.filter(function(t){ return t.id !== id; });
+  if (!isAdmin) { showToast('Cần quyền Quản trị để xóa nhiệm vụ', 'error'); return; }
+  var t = null;
+  for (var i = 0; i < tasks.length; i++) { if (tasks[i].id === id) { t = tasks[i]; break; } }
+  if (!t) return;
+  pendingDeleteId = id;
+  document.getElementById('cfmTaskName').textContent = t.content;
+  document.getElementById('cfmOverlay').classList.add('open');
+}
+function closeCfm() {
+  pendingDeleteId = 0;
+  document.getElementById('cfmOverlay').classList.remove('open');
+}
+function cfmConfirm() {
+  if (!pendingDeleteId) return;
+  tasks = tasks.filter(function(t){ return t.id !== pendingDeleteId; });
+  closeCfm();
+  closeDetail();
   saveAndRefresh();
-  showToast('Đã xóa', 'info');
+  showToast('Đã xóa nhiệm vụ', 'info');
+}
+
+// ─── ROLE & PIN ───────────────────────────────────────────────────────
+function toggleRole() {
+  if (isAdmin) {
+    isAdmin = false;
+    updateRoleBadge();
+    saveAndRefresh();
+    showToast('Đã chuyển về chế độ Xem', 'info');
+  } else {
+    openPinModal();
+  }
+}
+function updateRoleBadge() {
+  var btn = document.getElementById('roleBadge');
+  if (isAdmin) {
+    btn.className = 'role-badge role-admin';
+    btn.innerHTML = '&#9881; Quản trị &nbsp;<span style="font-size:9px;opacity:.8">(Nhấn để thoát)</span>';
+  } else {
+    btn.className = 'role-badge role-view';
+    btn.innerHTML = '&#128065; Chế độ Xem';
+  }
+}
+function openPinModal() {
+  pinBuffer = '';
+  document.getElementById('pinErr').textContent = '';
+  updatePinDots();
+  document.getElementById('pinOverlay').classList.add('open');
+}
+function closePinModal() {
+  document.getElementById('pinOverlay').classList.remove('open');
+  pinBuffer = '';
+  updatePinDots();
+}
+function pinPress(d) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updatePinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(checkPin, 180);
+  }
+}
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updatePinDots();
+  document.getElementById('pinErr').textContent = '';
+}
+function updatePinDots() {
+  for (var i = 0; i < 4; i++) {
+    var dot = document.getElementById('pd' + i);
+    dot.className = 'pin-dot' + (i < pinBuffer.length ? ' filled' : '');
+  }
+}
+function checkPin() {
+  if (pinBuffer === ADMIN_PIN) {
+    isAdmin = true;
+    closePinModal();
+    updateRoleBadge();
+    saveAndRefresh();
+    showToast('Đăng nhập thành công! Đang ở chế độ Quản trị', 'success');
+  } else {
+    var dots = document.querySelectorAll('.pin-dot');
+    for (var i = 0; i < dots.length; i++) dots[i].className = 'pin-dot error';
+    document.getElementById('pinErr').textContent = 'Sai mã PIN. Vui lòng thử lại.';
+    pinBuffer = '';
+    setTimeout(function(){
+      updatePinDots();
+    }, 600);
+  }
 }
 
 // ─── DETAIL ───────────────────────────────────────────────────────────
@@ -1165,8 +1354,9 @@ function openDetail(id) {
 
   document.getElementById('detailFoot').innerHTML =
     '<button class="btn b-gr" onclick="closeDetail()">Đóng</button>'
-    + '<button class="btn b-gn" onclick="closeDetail();markDone(' + t.id + ')">&#9989; Hoàn thành</button>'
-    + '<button class="btn b-pr" onclick="closeDetail();openModal(' + t.id + ')">&#9997; Chỉnh sửa</button>';
+    + (isAdmin ? '<button class="btn b-gn" onclick="closeDetail();markDone(' + t.id + ')">&#9989; Hoàn thành</button>' : '')
+    + (isAdmin ? '<button class="btn b-pr" onclick="closeDetail();openModal(' + t.id + ')">&#9997; Chỉnh sửa</button>' : '')
+    + (isAdmin ? '<button class="btn b-rd" onclick="delTask(' + t.id + ')">&#128465; Xóa</button>' : '');
 
   document.getElementById('detailModal').classList.add('open');
 }
@@ -1297,6 +1487,19 @@ function showToast(msg, type) {
 // ─── CLICK OUTSIDE ────────────────────────────────────────────────────
 document.getElementById('taskModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeDetail(); });
+document.getElementById('pinOverlay').addEventListener('click', function(e) { if (e.target === this) closePinModal(); });
+document.getElementById('cfmOverlay').addEventListener('click', function(e) { if (e.target === this) closeCfm(); });
+document.addEventListener('keydown', function(e) {
+  var pinOpen = document.getElementById('pinOverlay').classList.contains('open');
+  if (pinOpen) {
+    if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+    else if (e.key === 'Backspace') pinDel();
+    else if (e.key === 'Escape') closePinModal();
+  } else if (document.getElementById('cfmOverlay').classList.contains('open')) {
+    if (e.key === 'Escape') closeCfm();
+    if (e.key === 'Enter') cfmConfirm();
+  }
+});
 
 // ─── SAMPLE DATA ──────────────────────────────────────────────────────
 function initSampleData() {
