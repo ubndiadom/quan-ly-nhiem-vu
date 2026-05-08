@@ -787,8 +787,38 @@ function ddays(dl) {
 }
 function fmtDate(s) {
   if (!s) return '--';
-  var p = s.split('-');
-  return p[2] + '/' + p[1] + '/' + p[0];
+
+  // Nếu là Date object
+  if (s instanceof Date) {
+    if (isNaN(s.getTime())) return '--';
+    return zp(s.getDate()) + '/' + zp(s.getMonth() + 1) + '/' + s.getFullYear();
+  }
+
+  var text = String(s).trim();
+  if (!text) return '--';
+
+  // Trường hợp Google Apps Script trả ISO datetime:
+  // Ví dụ: 2026-05-14T17:00:00.000Z
+  if (text.indexOf('T') > -1) {
+    var dIso = new Date(text);
+    if (!isNaN(dIso.getTime())) {
+      return zp(dIso.getDate()) + '/' + zp(dIso.getMonth() + 1) + '/' + dIso.getFullYear();
+    }
+  }
+
+  // Trường hợp chuẩn YYYY-MM-DD
+  var m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    return m[3] + '/' + m[2] + '/' + m[1];
+  }
+
+  // Trường hợp chuỗi ngày khác nhưng JS đọc được
+  var d = new Date(text);
+  if (!isNaN(d.getTime())) {
+    return zp(d.getDate()) + '/' + zp(d.getMonth() + 1) + '/' + d.getFullYear();
+  }
+
+  return text;
 }
 function today() {
   return new Date().toISOString().split('T')[0];
