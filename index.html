@@ -2239,6 +2239,520 @@ function initSampleData() {
   saveTasks();
 }
 
+/* =====================================================================
+   PATCH AN TOÀN - UBND IA DOM
+   Dán khối này ngay TRƯỚC dòng:
+   // ─── INIT ─────────────────────────────────────────────────────────────
+   ===================================================================== */
+
+function patchSafeText(value) {
+  return escapeHtml(value);
+}
+
+function patchSafeLower(value) {
+  return String(value === undefined || value === null ? '' : value).toLowerCase();
+}
+
+function patchSafeId(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, ' ')
+    .replace(/\n/g, ' ');
+}
+
+function patchSafeNumber(value, fallback) {
+  var n = parseInt(value, 10);
+  if (isNaN(n)) return fallback || 0;
+  return n;
+}
+
+function patchMapDeptNameToKey(name) {
+  if (!name) return 'KH';
+
+  var text = String(name).toLowerCase();
+  var keys = Object.keys(DEPT_MAP);
+
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var full = String(DEPT_MAP[k] || '').toLowerCase();
+
+    if (full.indexOf(text) >= 0 || text.indexOf(full) >= 0) {
+      return k;
+    }
+  }
+
+  return 'KH';
+}
+
+/* VÁ LỖI ADMIN_PIN:
+   File hiện tại còn checkPin() gọi ADMIN_PIN nhưng ADMIN_PIN không còn khai báo.
+   Bản này không hardcode PIN ở frontend. PIN chỉ lưu tạm trong sessionStorage.
+   Backend GAS sẽ kiểm tra đúng/sai khi lưu/xóa. */
+function checkPin() {
+  if (!pinBuffer) {
+    document.getElementById('pinErr').textContent = 'Vui lòng nhập mã PIN.';
+    return;
+  }
+
+  writeToken = pinBuffer;
+  sessionStorage.setItem('ubnd_write_token', writeToken);
+
+  isAdmin = true;
+  closePinModal();
+  updateRoleBadge();
+  updateAdminUI();
+  renderAll();
+
+  showToast('Đã bật chế độ Quản trị. PIN sẽ được máy chủ kiểm tra khi lưu/xóa.', 'success');
+}
+
+/* DASHBOARD - bản escapeHtml */
+function renderDashboard() {
+  var urg = tasks.filter(function(t) {
+    var s = getStatus(t);
+    return s === 'qua' || s === 'sap';
+  }).sort(function(a, b) {
+    return (a.deadline || '') < (b.deadline || '') ? -1 : 1;
+  }).slice(0, 5);
+
+  var ul = document.getElementById('urgList');
+
+  if (!urg.length) {
+    ul.innerHTML = '<div class="emp" style="padding:20px"><div class="ei" style="font-size:28px">&#128522;</div><p style="font-size:12px">Không có nhiệm vụ khẩn cấp</p></div>';
+  } else {
+    var html = '';
+
+    for (var i = 0; i < urg.length; i++) {
+      var t = urg[i];
+      var dl = dlInfo(t);
+      var id = patchSafeId(t.id);
+
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:flex-start">'
+        + '<div style="flex:1">'
+        + '<div style="font-weight:600;font-size:12px;line-height:1.4">' + patchSafeText(t.content) + '</div>'
+        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">&#128204; '
+        + patchSafeText(deptLabel(t.dept))
+        + ' &middot; <span class="' + patchSafeText(dl.cls) + '">' + patchSafeText(dl.tx) + '</span></div>'
+        + '</div>'
+        + '<button class="btn b-pr b-sm" onclick="openDetail(\'' + id + '\')">Xem</button>'
+        + '</div>';
+    }
+
+    ul.innerHTML = html;
+  }
+
+  var rc = tasks.slice().sort(function(a, b) {
+    return patchSafeNumber(b.id, 0) - patchSafeNumber(a.id, 0);
+  }).slice(0, 5);
+
+  var rl = document.getElementById('recentList');
+
+  if (!rc.length) {
+    rl.innerHTML = '<div class="emp" style="padding:20px"><div class="ei" style="font-size:28px">&#128237;</div><p style="font-size:12px">Chưa có nhiệm vụ nào</p></div>';
+  } else {
+    var html2 = '';
+
+    for (var j = 0; j < rc.length; j++) {
+      var rt = rc[j];
+      var rs = getStatus(rt);
+
+      html2 += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:flex-start">'
+        + '<div style="flex:1">'
+        + '<div style="font-weight:600;font-size:12px;line-height:1.4">' + patchSafeText(rt.content) + '</div>'
+        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">&#128204; '
+        + patchSafeText(deptLabel(rt.dept))
+        + ' &middot; &#128197; ' + patchSafeText(fmtDate(rt.deadline)) + '</div>'
+        + '</div>'
+        + '<span class="' + patchSafeText(badgeCls(rs)) + '">' + patchSafeText(statusLabel(rs)) + '</span>'
+        + '</div>';
+    }
+
+    rl.innerHTML = html2;
+  }
+}
+
+/* THEO ĐƠN VỊ - bản escapeHtml */
+function renderDepts() {
+  var html = '';
+
+  for (var di = 0; di < MAIN_DEPTS.length; di++) {
+    var cfg = MAIN_DEPTS[di];
+    var st = getDeptStats(cfg.key);
+    var donePct = st.total ? Math.round(st.done / st.total * 100) : 0;
+    var bc = donePct >= 80 ? '#27ae60' : donePct >= 50 ? '#2980b9' : donePct >= 20 ? '#e67e22' : '#c0392b';
+    var urg = st.tasks.filter(function(t) {
+      var s = getStatus(t);
+      return s === 'qua' || s === 'sap';
+    }).slice(0, 3);
+    var show = urg.length ? urg : st.tasks.slice().sort(function(a, b) {
+      return patchSafeNumber(b.id, 0) - patchSafeNumber(a.id, 0);
+    }).slice(0, 3);
+
+    var name = DEPT_MAP[cfg.key];
+
+    html += '<div class="dc">'
+      + '<div class="dch ' + patchSafeText(cfg.cls) + '">'
+      + '<div class="dci">' + cfg.icon + '</div>'
+      + '<div><div class="dcn">' + patchSafeText(name) + '</div>'
+      + '<div style="font-size:10px;opacity:.75;margin-top:2px">' + st.total + ' nhiệm vụ &middot; ' + donePct + '% hoàn thành</div></div>'
+      + '</div>'
+      + '<div class="dcb">'
+      + '<div class="dst">'
+      + '<div class="ds"><div class="ds-n" style="color:#2980b9">' + st.prog + '</div><div class="ds-l">Đang làm</div></div>'
+      + '<div class="ds"><div class="ds-n" style="color:#27ae60">' + st.done + '</div><div class="ds-l">Hoàn thành</div></div>'
+      + '<div class="ds"><div class="ds-n" style="color:#c0392b">' + st.late + '</div><div class="ds-l">Quá hạn</div></div>'
+      + '<div class="ds"><div class="ds-n" style="color:#e67e22">' + st.warn + '</div><div class="ds-l">Sắp hạn</div></div>'
+      + '</div>'
+      + '<div class="dpl"><span>Tiến độ TB</span><span style="font-weight:700;color:' + bc + '">' + st.avgP + '%</span></div>'
+      + '<div class="dpb"><div class="dpbf" style="width:' + st.avgP + '%;background:' + bc + '"></div></div>'
+      + '<div style="margin-top:10px">'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">'
+      + (urg.length ? '&#9888; Cần xử lý ngay' : '&#128203; Nhiệm vụ gần đây')
+      + '</div>';
+
+    if (st.total === 0) {
+      html += '<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted)">Chưa có nhiệm vụ nào</div>';
+    } else {
+      html += '<div class="dtp">';
+
+      for (var si = 0; si < show.length; si++) {
+        var tt = show[si];
+        var ss = getStatus(tt);
+
+        html += '<div class="dtpi">'
+          + '<span class="' + patchSafeText(badgeCls(ss)) + '" style="font-size:9px;flex-shrink:0">' + patchSafeText(statusLabel(ss)) + '</span>'
+          + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + patchSafeText(tt.content) + '</span>'
+          + '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    html += '</div></div>'
+      + '<div class="dcf">'
+      + '<button class="btn b-pr b-sm" style="flex:1" onclick="filterDeptGo(\'' + patchSafeId(cfg.key) + '\')">&#128203; Xem tất cả</button>'
+      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + patchSafeId(cfg.key) + '\')">&#10133; Thêm</button>' : '')
+      + '</div></div>';
+  }
+
+  document.getElementById('deptGrid').innerHTML = html;
+}
+
+/* DANH SÁCH NHIỆM VỤ - bản escapeHtml */
+function renderTable() {
+  var q = patchSafeLower(document.getElementById('searchInput').value);
+  var fS = document.getElementById('filterStatus').value;
+  var fD = document.getElementById('filterDept').value;
+  var fP = document.getElementById('filterPri').value;
+
+  var fl = tasks.filter(function(t) {
+    var s = getStatus(t);
+    return (
+      !q ||
+      patchSafeLower(t.content).indexOf(q) >= 0 ||
+      patchSafeLower(t.doc).indexOf(q) >= 0 ||
+      patchSafeLower(deptLabel(t.dept)).indexOf(q) >= 0
+    ) && (!fS || s === fS || t.status === fS)
+      && (!fD || t.dept === fD)
+      && (!fP || t.priority === fP);
+  });
+
+  var tb = document.getElementById('taskBody');
+
+  if (!fl.length) {
+    tb.innerHTML = '<tr><td colspan="8"><div class="emp"><div class="ei">&#128269;</div><p>Không tìm thấy kết quả phù hợp</p></div></td></tr>';
+    return;
+  }
+
+  var html = '';
+
+  for (var i = 0; i < fl.length; i++) {
+    var t = fl[i];
+    var s = getStatus(t);
+    var dl = dlInfo(t);
+    var pp = t.priority || 'tb';
+    var pc = getPct(t);
+    var priCls = pp === 'cao' ? 'priH' : pp === 'thap' ? 'priL' : 'priM';
+    var id = patchSafeId(t.id);
+
+    html += '<tr>'
+      + '<td style="color:var(--muted);font-size:11px">' + (i + 1) + '</td>'
+      + '<td><div style="font-weight:600;line-height:1.4">' + patchSafeText(t.content) + '</div>'
+      + (t.doc ? '<div style="font-size:10px;color:var(--muted);margin-top:1px">&#128196; ' + patchSafeText(t.doc) + '</div>' : '')
+      + '</td>'
+      + '<td class="hm"><div style="font-size:12px">&#128204; ' + patchSafeText(deptLabel(t.dept)) + '</div>'
+      + (t.coord ? '<div style="font-size:10px;color:var(--muted)">&#129309; ' + patchSafeText(t.coord) + '</div>' : '')
+      + '</td>'
+      + '<td><span class="' + patchSafeText(dl.cls) + '">' + patchSafeText(dl.tx) + '</span></td>'
+      + '<td><span class="' + patchSafeText(badgeCls(s)) + '">' + patchSafeText(statusLabel(s)) + '</span></td>'
+      + '<td class="hm"><div style="font-size:11px;font-weight:600;margin-bottom:2px">' + pc + '%</div><div class="pb"><div class="pbf" style="width:' + pc + '%"></div></div></td>'
+      + '<td class="hm"><span class="' + patchSafeText(priCls) + '">' + patchSafeText(priLabel(pp)) + '</span></td>'
+      + '<td><div class="acell">'
+      + '<button class="btn b-pr b-sm" onclick="openDetail(\'' + id + '\')" title="Chi tiết">&#128065;</button>'
+      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModal(' + patchSafeNumber(t.id, 0) + ')" title="Chỉnh sửa">&#9997;</button>' : '')
+      + (isAdmin ? '<button class="btn b-rd b-sm" onclick="delTask(' + patchSafeNumber(t.id, 0) + ')" title="Xóa">&#128465;</button>' : '')
+      + '</div></td>'
+      + '</tr>';
+  }
+
+  tb.innerHTML = html;
+
+  var depts = [];
+  var seen2 = {};
+
+  for (var j = 0; j < tasks.length; j++) {
+    if (tasks[j].dept && !seen2[tasks[j].dept]) {
+      seen2[tasks[j].dept] = 1;
+      depts.push(tasks[j].dept);
+    }
+  }
+
+  var fd = document.getElementById('filterDept');
+  var cv = fd.value;
+  var opts = '<option value="">Tất cả đơn vị</option>';
+
+  for (var k = 0; k < depts.length; k++) {
+    opts += '<option value="' + patchSafeText(depts[k]) + '"' + (depts[k] === cv ? ' selected' : '') + '>' + patchSafeText(deptLabel(depts[k])) + '</option>';
+  }
+
+  fd.innerHTML = opts;
+}
+
+/* KANBAN - bản escapeHtml */
+function renderKanban() {
+  var cols = [
+    { k: 'chua', e: '&#128237;', c: '#6b7a99' },
+    { k: 'dang', e: '&#9881;', c: 'var(--info)' },
+    { k: 'sap', e: '&#9203;', c: 'var(--warn)' },
+    { k: 'qua', e: '&#128680;', c: 'var(--err)' },
+    { k: 'hoan', e: '&#9989;', c: 'var(--ok)' }
+  ];
+
+  var html = '';
+
+  for (var ci = 0; ci < cols.length; ci++) {
+    var col = cols[ci];
+    var ct = tasks.filter(function(t) {
+      return getStatus(t) === col.k;
+    });
+
+    html += '<div class="kbc">'
+      + '<div class="kbch" style="color:' + col.c + '">' + col.e + ' ' + patchSafeText(statusLabel(col.k))
+      + '<span class="kbcn" style="color:' + col.c + '">' + ct.length + '</span></div>';
+
+    if (!ct.length) {
+      html += '<div style="text-align:center;padding:14px;font-size:11px;color:var(--muted)">Không có</div>';
+    } else {
+      for (var ti = 0; ti < ct.length; ti++) {
+        var t = ct[ti];
+        var d = ddays(t.deadline);
+        var uc = (d !== null && d < 0) ? 'late' : (d !== null && d <= 3) ? 'warn' : (t.status === 'hoan' ? 'done' : '');
+        var pc = getPct(t);
+
+        html += '<div class="kbcard ' + patchSafeText(uc) + '" onclick="openDetail(\'' + patchSafeId(t.id) + '\')">'
+          + '<div class="kbct">' + patchSafeText(t.content) + '</div>'
+          + '<div class="kbcm"><span>&#128204; ' + patchSafeText(deptLabel(t.dept)) + '</span><span>&#128197; ' + patchSafeText(fmtDate(t.deadline)) + '</span></div>'
+          + '<div class="pb" style="margin-top:5px"><div class="pbf" style="width:' + pc + '%"></div></div>'
+          + '</div>';
+      }
+    }
+
+    html += '</div>';
+  }
+
+  document.getElementById('kanbanBoard').innerHTML = html;
+}
+
+/* NHẮC VIỆC - bản escapeHtml */
+function renderReminders() {
+  var rm = tasks.filter(function(t) {
+    var s = getStatus(t);
+    return s === 'qua' || s === 'sap';
+  }).sort(function(a, b) {
+    return (a.deadline || '') < (b.deadline || '') ? -1 : 1;
+  });
+
+  var el = document.getElementById('rmList');
+
+  if (!rm.length) {
+    el.innerHTML = '<div class="emp"><div class="ei">&#127881;</div><p>Tuyệt vời! Không có nhiệm vụ nào cần nhắc nhở.</p></div>';
+    return;
+  }
+
+  var html = '';
+
+  for (var i = 0; i < rm.length; i++) {
+    var t = rm[i];
+    var s = getStatus(t);
+    var d = ddays(t.deadline);
+    var isLate = s === 'qua';
+
+    html += '<div class="rmc ' + (isLate ? 'late' : 'warn') + '">'
+      + '<div class="rmib">' + (isLate ? '&#128680;' : '&#9203;') + '</div>'
+      + '<div class="rmct">'
+      + '<div class="rmtl">' + patchSafeText(t.content) + '</div>'
+      + '<div class="rmmeta">&#128204; ' + patchSafeText(deptLabel(t.dept))
+      + ' &middot; &#128196; ' + patchSafeText(t.doc || 'Không có văn bản')
+      + ' &middot; &#128197; ' + patchSafeText(fmtDate(t.deadline))
+      + ' &middot; <strong class="' + (isLate ? 'dllt' : 'dlwn') + '">'
+      + patchSafeText(isLate ? 'Quá hạn ' + Math.abs(d) + ' ngày' : 'Còn ' + d + ' ngày')
+      + '</strong></div>'
+      + (t.note ? '<div style="font-size:11px;margin-top:3px;color:var(--muted)">&#128221; ' + patchSafeText(t.note) + '</div>' : '')
+      + '<div class="rma">'
+      + (isAdmin ? '<button class="btn b-pr b-sm" onclick="openModal(' + patchSafeNumber(t.id, 0) + ')">&#9997; Cập nhật</button>' : '')
+      + (isAdmin ? '<button class="btn b-gn b-sm" onclick="markDone(' + patchSafeNumber(t.id, 0) + ')">&#9989; Hoàn thành</button>' : '')
+      + '<button class="btn b-gr b-sm" onclick="openDetail(\'' + patchSafeId(t.id) + '\')">&#128065; Chi tiết</button>'
+      + '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+/* CHẶN AI GỌI TRỰC TIẾP TỪ GITHUB PAGES:
+   Không nên gọi api.anthropic.com trực tiếp trong HTML công khai.
+   Muốn bật AI an toàn thì tạo action extractTasksAI trong GAS backend rồi gọi qua GAS_URL. */
+function extractAI() {
+  showToast('Đã khóa gọi AI trực tiếp từ trình duyệt để tránh lộ API key. Hãy triển khai AI qua GAS backend.', 'info');
+}
+
+/* HIỂN THỊ KẾT QUẢ AI - bản escapeHtml */
+function showExtracted(items) {
+  if (!items || !items.length) {
+    showToast('Không tìm thấy nhiệm vụ trong văn bản', 'info');
+    return;
+  }
+
+  document.getElementById('exCount').textContent = items.length + ' nhiệm vụ';
+  document.getElementById('aiRes').classList.add('vis');
+
+  var html = '';
+
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+
+    html += '<div class="exi">'
+      + '<div class="extt">' + patchSafeText(it.content) + '</div>'
+      + '<div class="exmt">'
+      + (it.dept ? '<span>&#128204; ' + patchSafeText(it.dept) + '</span>' : '')
+      + (it.deadline ? '<span>&#128197; ' + patchSafeText(fmtDate(it.deadline)) + '</span>' : '')
+      + (it.priority ? '<span>&#127919; ' + patchSafeText(priLabel(it.priority)) + '</span>' : '')
+      + (it.doc ? '<span>&#128196; ' + patchSafeText(it.doc) + '</span>' : '')
+      + '</div>'
+      + '<button class="btn b-pr b-sm addex" onclick="addOneEx(' + i + ')">&#10133; Thêm</button>'
+      + '</div>';
+  }
+
+  document.getElementById('aiResBody').innerHTML = html;
+}
+
+/* THÊM 1 NHIỆM VỤ AI - lưu thật lên Google Sheets */
+async function addOneEx(i) {
+  if (!isAdmin) {
+    showToast('Cần quyền Quản trị để thêm nhiệm vụ.', 'error');
+    return;
+  }
+
+  var it = exTasks[i];
+  if (!it) return;
+
+  var newTask = {
+    id: Date.now() + i,
+    content: String(it.content || '').trim(),
+    doc: String(it.doc || '').trim(),
+    assignDate: today(),
+    dept: it.deptKey || patchMapDeptNameToKey(it.dept),
+    coord: String(it.coord || '').trim(),
+    deadline: String(it.deadline || '').trim(),
+    priority: it.priority || 'tb',
+    status: 'chua',
+    progress: 0,
+    note: ''
+  };
+
+  if (!newTask.content) {
+    showToast('Nhiệm vụ trích xuất chưa có nội dung.', 'error');
+    return;
+  }
+
+  try {
+    setSaving(true, 'Đang thêm nhiệm vụ...');
+    var saved = await saveTaskObjectToServer(newTask);
+
+    if (saved) {
+      showToast('Đã thêm nhiệm vụ vào Google Sheets.', 'success');
+
+      var btns = document.querySelectorAll('.addex');
+      if (btns[i]) {
+        btns[i].textContent = 'Đã thêm';
+        btns[i].disabled = true;
+        btns[i].style.background = '#27ae60';
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Không thêm được nhiệm vụ.', 'error');
+  } finally {
+    setSaving(false);
+  }
+}
+
+/* THÊM TẤT CẢ NHIỆM VỤ AI - lưu thật lên Google Sheets */
+async function addAllEx() {
+  if (!isAdmin) {
+    showToast('Cần quyền Quản trị để thêm nhiệm vụ.', 'error');
+    return;
+  }
+
+  if (!exTasks || !exTasks.length) {
+    showToast('Không có nhiệm vụ nào để thêm.', 'info');
+    return;
+  }
+
+  var ok = 0;
+
+  try {
+    setSaving(true, 'Đang thêm các nhiệm vụ...');
+
+    for (var i = 0; i < exTasks.length; i++) {
+      var it = exTasks[i] || {};
+
+      var newTask = {
+        id: Date.now() + i + Math.floor(Math.random() * 1000),
+        content: String(it.content || '').trim(),
+        doc: String(it.doc || '').trim(),
+        assignDate: today(),
+        dept: it.deptKey || patchMapDeptNameToKey(it.dept),
+        coord: String(it.coord || '').trim(),
+        deadline: String(it.deadline || '').trim(),
+        priority: it.priority || 'tb',
+        status: 'chua',
+        progress: 0,
+        note: ''
+      };
+
+      if (!newTask.content) continue;
+
+      var saved = await saveTaskObjectToServer(newTask);
+      if (saved) ok++;
+    }
+
+    closeAIRes();
+    showToast('Đã thêm ' + ok + ' nhiệm vụ vào Google Sheets.', 'success');
+    swTab('tasks');
+
+  } catch (err) {
+    console.error(err);
+    showToast('Không thêm được toàn bộ nhiệm vụ.', 'error');
+  } finally {
+    setSaving(false);
+  }
+}
+
+/* =====================================================================
+   HẾT PATCH
+   ===================================================================== */
+
 // ─── INIT ─────────────────────────────────────────────────────────────
 // ─── INIT ─────────────────────────────────────────────────────────────
 async function initApp() {
