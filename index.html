@@ -640,15 +640,24 @@ textarea.fc{resize:vertical;min-height:75px}
 // Dán URL Web App GAS đã deploy vào đây, kết thúc bằng /exec
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbyU_dHKYsGef3ofTDNXpF1bm7B59WZjXgsyASBcS4ZrBelqx2zrgsZOoVogxY1NQ9A/exec';
 
-var isAdmin = false;
+// ─── ROLE STATE ─────────────────────────────────────────────────────────
+// Mô hình mới: viewer | dept | admin
+var currentRole = sessionStorage.getItem('ubnd_current_role') || 'viewer';
+var currentDept = sessionStorage.getItem('ubnd_current_dept') || '';
+var currentRoleName = sessionStorage.getItem('ubnd_current_role_name') || 'Chế độ Xem';
+
+// Giữ biến isAdmin để tương thích tạm với các đoạn code cũ.
+// Sau này sẽ thay dần bằng canEditTask/canDeleteTask.
+var isAdmin = currentRole === 'admin';
+
 var isSaving = false;
 var pendingDeleteId = 0;
 var pinBuffer = '';
 
-// PIN/token không hardcode trong HTML.
-// Người dùng nhập khi cần cập nhật, lưu tạm trong sessionStorage của phiên trình duyệt.
+// Token/PIN chỉ lưu tạm trong sessionStorage của phiên trình duyệt.
 var writeToken = sessionStorage.getItem('ubnd_write_token') || '';
 var currentUser = localStorage.getItem('ubnd_current_user') || '';
+
 var DEPT_MAP = {
   'VP': 'Văn phòng HĐND và UBND',
   'KT': 'Phòng Kinh tế',
@@ -662,6 +671,55 @@ var DEPT_MAP = {
   'YT': 'Trạm Y tế',
   'KH': 'Đơn vị khác'
 };
+
+function syncLegacyAdminFlag() {
+  isAdmin = currentRole === 'admin';
+}
+
+function saveRoleSession() {
+  sessionStorage.setItem('ubnd_current_role', currentRole || 'viewer');
+  sessionStorage.setItem('ubnd_current_dept', currentDept || '');
+  sessionStorage.setItem('ubnd_current_role_name', currentRoleName || 'Chế độ Xem');
+  sessionStorage.setItem('ubnd_write_token', writeToken || '');
+  syncLegacyAdminFlag();
+}
+
+function clearRoleSession() {
+  currentRole = 'viewer';
+  currentDept = '';
+  currentRoleName = 'Chế độ Xem';
+  writeToken = '';
+
+  sessionStorage.removeItem('ubnd_current_role');
+  sessionStorage.removeItem('ubnd_current_dept');
+  sessionStorage.removeItem('ubnd_current_role_name');
+  sessionStorage.removeItem('ubnd_write_token');
+
+  syncLegacyAdminFlag();
+}
+
+function canCreateTask() {
+  return currentRole === 'admin' || currentRole === 'dept';
+}
+
+function canEditTask(t) {
+  if (currentRole === 'admin') return true;
+  if (currentRole === 'dept' && t && String(t.dept || '') === String(currentDept || '')) return true;
+  return false;
+}
+
+function canCompleteTask(t) {
+  return canEditTask(t);
+}
+
+function canDeleteTask(t) {
+  return currentRole === 'admin';
+}
+
+function canUseAI() {
+  return currentRole === 'admin';
+}
+}
 var MAIN_DEPTS = [
   { key: 'VP', cls: 'd-vp', icon: '&#127963;' },
   { key: 'KT', cls: 'd-kt', icon: '&#128188;' },
@@ -742,19 +800,14 @@ function setSaving(flag, message) {
 }
 
 function getWriteToken() {
-  if (writeToken) return writeToken;
+  if (currentRole === 'admin' || currentRole === 'dept') {
+    return String(writeToken || '').trim();
+  }
 
-  var pin = prompt('Nhập mã cập nhật/PIN quản trị');
-  if (!pin || !pin.trim()) return '';
-
-  writeToken = pin.trim();
-  sessionStorage.setItem('ubnd_write_token', writeToken);
-  return writeToken;
+  return '';
 }
-
 function clearWriteToken() {
-  writeToken = '';
-  sessionStorage.removeItem('ubnd_write_token');
+  clearRoleSession();
 }
 
 function getCurrentUserName() {
@@ -811,7 +864,22 @@ async function apiPost(payload) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return await res.json();
 }
+async function loginWithToken(token) {
+  var result = await apiPost({
+    action: 'login',
+    pin: token
+  });
 
+  if (!result || !result.success) {
+    return {
+      success: false,
+      code: result && result.code ? result.code : 'AUTH',
+      message: result && result.message ? result.message : 'Mã đăng nhập không đúng.'
+    };
+  }
+
+  return result;
+}
 function findTaskById(id) {
   for (var i = 0; i < tasks.length; i++) {
     if (String(tasks[i].id) === String(id)) return tasks[i];
@@ -987,11 +1055,18 @@ function upsertLocalTask(task) {
   tasks.push(task);
 }
 
-async function saveTaskObjectToServer(taskObj) {
+async function saveTaskObjectToServer(taskObj, options) {
+  options = options || {};
+
   var token = getWriteToken();
   if (!token) {
-    showToast('Bạn chưa nhập mã cập nhật.', 'error');
-    return null;
+    var noTokenResult = {
+      success: false,
+      code: 'AUTH',
+      message: 'Bạn chưa đăng nhập hoặc chưa có mã cập nhật.'
+    };
+
+    return handleSaveResult(noTokenResult, options);
   }
 
   var payload = {
@@ -1002,10 +1077,20 @@ async function saveTaskObjectToServer(taskObj) {
   };
 
   var result = await apiPost(payload);
-  return handleSaveResult(result);
+  return handleSaveResult(result, options);
 }
 
-function handleSaveResult(result) {
+function handleSaveResult(result, options) {
+  options = options || {};
+
+  if (!result) {
+    result = {
+      success: false,
+      code: 'NO_RESPONSE',
+      message: 'Không nhận được phản hồi từ máy chủ.'
+    };
+  }
+
   if (result.success) {
     if (result.task) {
       upsertLocalTask(result.task);
@@ -1015,10 +1100,13 @@ function handleSaveResult(result) {
     if (result.code === 'NO_CHANGE') {
       showToast('Không có thay đổi mới.', 'info');
     } else {
-      showToast(result.message || 'Đã lưu nhiệm vụ.', 'success');
+      showToast(
+        options.successMessage || result.message || 'Đã lưu nhiệm vụ.',
+        'success'
+      );
     }
 
-    return result.task || null;
+    return result;
   }
 
   if (result.code === 'CONFLICT') {
@@ -1031,39 +1119,55 @@ function handleSaveResult(result) {
       loadData();
     }
 
-    return null;
+    return result;
   }
 
   if (result.code === 'BUSY') {
     showToast('Hệ thống đang bận. Vui lòng thử lại sau vài giây.', 'info');
-    return null;
+    return result;
   }
 
   if (result.code === 'AUTH') {
-    clearWriteToken();
-    isAdmin = false;
+    clearRoleSession();
     updateRoleBadge();
     updateAdminUI();
-    showToast('Mã cập nhật/PIN không đúng. Vui lòng nhập lại.', 'error');
-    return null;
+    renderAll();
+    showToast(
+      result.message || 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.',
+      'error'
+    );
+    return result;
+  }
+
+  if (result.code === 'FORBIDDEN') {
+    showToast(
+      result.message || 'Bạn không có quyền thực hiện thao tác này.',
+      'error'
+    );
+    return result;
   }
 
   if (result.code === 'VALIDATION') {
     showToast(result.message || 'Dữ liệu chưa hợp lệ.', 'error');
-    return null;
+    return result;
   }
 
   showToast(result.message || 'Không lưu được nhiệm vụ.', 'error');
-  return null;
-}function updateAdminUI() {
+  return result;
+}
+  function updateAdminUI() {
+  syncLegacyAdminFlag();
+
   var addBtns = document.querySelectorAll('.admin-only');
   for (var i = 0; i < addBtns.length; i++) {
-    addBtns[i].style.display = isAdmin ? '' : 'none';
+    addBtns[i].style.display = canCreateTask() ? '' : 'none';
   }
+
   var aiPanel = document.getElementById('aiAdminPanel');
   var aiNotice = document.getElementById('aiViewerNotice');
-  if (aiPanel) aiPanel.style.display = isAdmin ? '' : 'none';
-  if (aiNotice) aiNotice.style.display = isAdmin ? 'none' : 'block';
+
+  if (aiPanel) aiPanel.style.display = canUseAI() ? '' : 'none';
+  if (aiNotice) aiNotice.style.display = canUseAI() ? 'none' : 'block';
 }
 
 // ─── CLOCK ────────────────────────────────────────────────────────────
@@ -1662,14 +1766,15 @@ function renderReminders() {
 }
 
 async function markDone(id) {
-  if (!isAdmin) {
-    showToast('Cần quyền Quản trị để cập nhật nhiệm vụ', 'error');
+  var old = findTaskById(id);
+
+  if (!old) {
+    showToast('Không tìm thấy nhiệm vụ.', 'error');
     return;
   }
 
-  var old = findTaskById(id);
-  if (!old) {
-    showToast('Không tìm thấy nhiệm vụ.', 'error');
+  if (!canCompleteTask(old)) {
+    showToast('Bạn không có quyền hoàn thành nhiệm vụ này.', 'error');
     return;
   }
 
@@ -1680,7 +1785,11 @@ async function markDone(id) {
 
   try {
     setSaving(true, 'Đang cập nhật hoàn thành...');
-    await saveTaskObjectToServer(updated);
+
+    await saveTaskObjectToServer(updated, {
+      successMessage: 'Đã cập nhật hoàn thành nhiệm vụ.'
+    });
+
   } catch (err) {
     console.error(err);
     showToast('Không cập nhật được nhiệm vụ.', 'error');
@@ -1688,10 +1797,19 @@ async function markDone(id) {
     setSaving(false);
   }
 }
-
 // ─── MODAL ────────────────────────────────────────────────────────────
 function openModal(id) {
-  if (!isAdmin) { showToast('Cần quyền Quản trị để thêm hoặc chỉnh sửa nhiệm vụ', 'error'); return; }
+    var existingTask = id ? findTaskById(id) : null;
+
+  if (id && !canEditTask(existingTask)) {
+    showToast('Bạn không có quyền chỉnh sửa nhiệm vụ này.', 'error');
+    return;
+  }
+
+  if (!id && !canCreateTask()) {
+    showToast('Bạn không có quyền thêm nhiệm vụ.', 'error');
+    return;
+  }
   editId = id || 0;
   document.getElementById('modalTitle').textContent = id ? 'Chỉnh sửa nhiệm vụ' : 'Thêm nhiệm vụ mới';
   if (id) {
@@ -1721,14 +1839,30 @@ function openModal(id) {
     document.getElementById('fProg').value     = 0;
     document.getElementById('fNote').value     = '';
   }
+    var deptSelect = document.getElementById('fDept');
+  if (deptSelect) {
+    if (currentRole === 'dept') {
+      deptSelect.value = currentDept;
+      deptSelect.disabled = true;
+    } else {
+      deptSelect.disabled = false;
+    }
+  }
   document.getElementById('taskModal').classList.add('open');
 }
 
 function closeModal() { document.getElementById('taskModal').classList.remove('open'); }
 
 async function saveTask() {
-  if (!isAdmin) {
-    showToast('Cần quyền Quản trị để thêm hoặc chỉnh sửa nhiệm vụ', 'error');
+   var oldForPermission = editId ? findTaskById(editId) : null;
+
+  if (editId && !canEditTask(oldForPermission)) {
+    showToast('Bạn không có quyền lưu nhiệm vụ này.', 'error');
+    return;
+  }
+
+  if (!editId && !canCreateTask()) {
+    showToast('Bạn không có quyền thêm nhiệm vụ.', 'error');
     return;
   }
 
@@ -1755,7 +1889,9 @@ async function saveTask() {
     progress:   parseInt(document.getElementById('fProg').value, 10) || 0,
     note:       document.getElementById('fNote').value.trim()
   };
-
+  if (currentRole === 'dept') {
+    data.dept = currentDept;
+  }
   if (!data.dept) {
     showToast('Vui lòng chọn đơn vị chủ trì.', 'error');
     return;
@@ -1793,10 +1929,18 @@ async function saveTask() {
   }
 }
 function delTask(id) {
-  if (!isAdmin) { showToast('Cần quyền Quản trị để xóa nhiệm vụ', 'error'); return; }
-  var t = null;
-  for (var i = 0; i < tasks.length; i++) { if (tasks[i].id === id) { t = tasks[i]; break; } }
-  if (!t) return;
+  var t = findTaskById(id);
+
+  if (!t) {
+    showToast('Không tìm thấy nhiệm vụ.', 'error');
+    return;
+  }
+
+  if (!canDeleteTask(t)) {
+    showToast('Chỉ quản trị hệ thống được xóa nhiệm vụ.', 'error');
+    return;
+  }
+
   pendingDeleteId = id;
   document.getElementById('cfmTaskName').textContent = t.content;
   document.getElementById('cfmOverlay').classList.add('open');
@@ -1822,7 +1966,7 @@ async function cfmConfirm() {
 
   var token = getWriteToken();
   if (!token) {
-    showToast('Bạn chưa nhập mã cập nhật/PIN.', 'error');
+    showToast('Bạn chưa đăng nhập hoặc chưa có mã cập nhật.', 'error');
     return;
   }
 
@@ -1838,7 +1982,7 @@ async function cfmConfirm() {
       updatedAt: task.updatedAt
     });
 
-    if (result.success) {
+    if (result && result.success) {
       tasks = tasks.filter(function(t) {
         return String(t.id) !== String(task.id);
       });
@@ -1850,7 +1994,7 @@ async function cfmConfirm() {
       return;
     }
 
-    if (result.code === 'CONFLICT') {
+    if (result && result.code === 'CONFLICT') {
       showToast('Nhiệm vụ vừa được cập nhật. Vui lòng kiểm tra lại trước khi xóa.', 'error');
 
       if (result.currentTask) {
@@ -1864,16 +2008,29 @@ async function cfmConfirm() {
       return;
     }
 
-    if (result.code === 'AUTH') {
-      clearWriteToken();
-      isAdmin = false;
+    if (result && result.code === 'AUTH') {
+      clearRoleSession();
       updateRoleBadge();
       updateAdminUI();
-      showToast('Mã cập nhật/PIN không đúng.', 'error');
+      closeCfm();
+      renderAll();
+      showToast('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.', 'error');
       return;
     }
 
-    showToast(result.message || 'Không xóa được nhiệm vụ.', 'error');
+    if (result && result.code === 'FORBIDDEN') {
+      closeCfm();
+      showToast(
+        result.message || 'Bạn không có quyền thực hiện thao tác này.',
+        'error'
+      );
+      return;
+    }
+
+    showToast(
+      (result && result.message) || 'Không xóa được nhiệm vụ.',
+      'error'
+    );
 
   } catch (err) {
     console.error(err);
@@ -1883,37 +2040,84 @@ async function cfmConfirm() {
     setSaving(false);
   }
 }
-
 // ─── ROLE & PIN ───────────────────────────────────────────────────────
-function toggleRole() {
-  if (isAdmin) {
-    isAdmin = false;
+async function toggleRole() {
+  if (currentRole !== 'viewer') {
+    clearRoleSession();
     updateRoleBadge();
     updateAdminUI();
+    renderAll();
     showToast('Đã chuyển về chế độ Xem', 'info');
     return;
   }
 
-  var pin = getWriteToken();
-  if (!pin) {
-    showToast('Chưa nhập mã cập nhật/PIN.', 'error');
+  var pin = prompt('Nhập mã đăng nhập quản trị hoặc phòng ban');
+  if (!pin || !pin.trim()) {
+    showToast('Chưa nhập mã đăng nhập.', 'error');
     return;
   }
 
-  isAdmin = true;
-  updateRoleBadge();
-  updateAdminUI();
-  showToast('Đã bật chế độ Quản trị. PIN sẽ được máy chủ kiểm tra khi lưu/xóa.', 'success');
+  try {
+    setSaving(true, 'Đang đăng nhập...');
+
+    var token = pin.trim();
+    var result = await loginWithToken(token);
+
+    if (!result || !result.success) {
+      clearRoleSession();
+      updateRoleBadge();
+      updateAdminUI();
+      renderAll();
+      showToast(
+        (result && result.message) || 'Mã đăng nhập không đúng.',
+        'error'
+      );
+      return;
+    }
+
+    writeToken = token;
+    currentRole = result.role || 'viewer';
+    currentDept = result.dept || '';
+    currentRoleName = result.name || 'Người dùng';
+
+    saveRoleSession();
+    updateRoleBadge();
+    updateAdminUI();
+    renderAll();
+
+    showToast('Đăng nhập thành công: ' + currentRoleName, 'success');
+
+  } catch (err) {
+    console.error(err);
+    showToast('Không đăng nhập được. Vui lòng kiểm tra kết nối.', 'error');
+
+  } finally {
+    setSaving(false);
+  }
 }
 function updateRoleBadge() {
   var btn = document.getElementById('roleBadge');
-  if (isAdmin) {
+  if (!btn) return;
+
+  syncLegacyAdminFlag();
+
+  if (currentRole === 'admin') {
     btn.className = 'role-badge role-admin';
-    btn.innerHTML = '&#9881; Quản trị &nbsp;<span style="font-size:9px;opacity:.8">(Nhấn để thoát)</span>';
-  } else {
-    btn.className = 'role-badge role-view';
-    btn.innerHTML = '&#128065; Chế độ Xem';
+    btn.innerHTML = '&#9881; Quản trị hệ thống &nbsp;<span style="font-size:9px;opacity:.8">(Nhấn để thoát)</span>';
+    btn.title = 'Đang đăng nhập Quản trị. Nhấn để thoát.';
+    return;
   }
+
+  if (currentRole === 'dept') {
+    btn.className = 'role-badge role-admin';
+    btn.innerHTML = '&#128204; ' + escapeHtml(currentRoleName || deptLabel(currentDept)) + ' &nbsp;<span style="font-size:9px;opacity:.8">(Nhấn để thoát)</span>';
+    btn.title = 'Đang đăng nhập phòng ban. Nhấn để thoát.';
+    return;
+  }
+
+  btn.className = 'role-badge role-view';
+  btn.innerHTML = '&#128065; Chế độ Xem';
+  btn.title = 'Nhấn để đăng nhập';
 }
 function openPinModal() {
   pinBuffer = '';
@@ -1945,24 +2149,51 @@ function updatePinDots() {
     dot.className = 'pin-dot' + (i < pinBuffer.length ? ' filled' : '');
   }
 }
-function checkPin() {
-  if (pinBuffer === ADMIN_PIN) {
-    isAdmin = true;
+async function checkPin() {
+  var token = String(pinBuffer || '').trim();
+
+  if (!token) {
+    document.getElementById('pinErr').textContent = 'Vui lòng nhập mã đăng nhập.';
+    return;
+  }
+
+  try {
+    var result = await loginWithToken(token);
+
+    if (!result || !result.success) {
+      var dots = document.querySelectorAll('.pin-dot');
+      for (var i = 0; i < dots.length; i++) dots[i].className = 'pin-dot error';
+
+      document.getElementById('pinErr').textContent =
+        (result && result.message) || 'Sai mã. Vui lòng thử lại.';
+
+      pinBuffer = '';
+
+      setTimeout(function() {
+        updatePinDots();
+      }, 600);
+
+      return;
+    }
+
+    writeToken = token;
+    currentRole = result.role || 'viewer';
+    currentDept = result.dept || '';
+    currentRoleName = result.name || 'Người dùng';
+
+    saveRoleSession();
     closePinModal();
     updateRoleBadge();
-    saveAndRefresh();
-    showToast('Đăng nhập thành công! Đang ở chế độ Quản trị', 'success');
-  } else {
-    var dots = document.querySelectorAll('.pin-dot');
-    for (var i = 0; i < dots.length; i++) dots[i].className = 'pin-dot error';
-    document.getElementById('pinErr').textContent = 'Sai mã PIN. Vui lòng thử lại.';
-    pinBuffer = '';
-    setTimeout(function(){
-      updatePinDots();
-    }, 600);
+    updateAdminUI();
+    renderAll();
+
+    showToast('Đăng nhập thành công: ' + currentRoleName, 'success');
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('pinErr').textContent = 'Không đăng nhập được. Vui lòng thử lại.';
   }
 }
-
 // ─── DETAIL ───────────────────────────────────────────────────────────
 function openDetail(id) {
   var t = null;
