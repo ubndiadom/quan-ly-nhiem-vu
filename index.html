@@ -1325,47 +1325,6 @@ function filterDeptGo(d) {
   renderTable();
 }
 
-// ─── DASHBOARD ────────────────────────────────────────────────────────
-function renderDashboard() {
-  // Urgent
-  var urg = tasks.filter(function(t) {
-    var s = getStatus(t);
-    return s === 'qua' || s === 'sap';
-  }).sort(function(a,b) {
-    return (a.deadline || '') < (b.deadline || '') ? -1 : 1;
-  }).slice(0, 5);
-  var ul = document.getElementById('urgList');
-  if (!urg.length) {
-    ul.innerHTML = '<div class="emp" style="padding:20px"><div class="ei" style="font-size:28px">&#128522;</div><p style="font-size:12px">Không có nhiệm vụ khẩn cấp</p></div>';
-  } else {
-    var html = '';
-    for (var i = 0; i < urg.length; i++) {
-      var t = urg[i]; var dl = dlInfo(t);
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:flex-start">'
-        + '<div style="flex:1"><div style="font-weight:600;font-size:12px;line-height:1.4">' + t.content + '</div>'
-        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">&#128204; ' + deptLabel(t.dept) + ' &middot; <span class="' + dl.cls + '">' + dl.tx + '</span></div></div>'
-        + '<button class="btn b-pr b-sm" onclick="openDetail(' + t.id + ')">Xem</button></div>';
-    }
-    ul.innerHTML = html;
-  }
-  // Recent
-  var rc = tasks.slice().sort(function(a,b){ return b.id - a.id; }).slice(0,5);
-  var rl = document.getElementById('recentList');
-  if (!rc.length) {
-    rl.innerHTML = '<div class="emp" style="padding:20px"><div class="ei" style="font-size:28px">&#128237;</div><p style="font-size:12px">Chưa có nhiệm vụ nào</p></div>';
-  } else {
-    var html = '';
-    for (var i = 0; i < rc.length; i++) {
-      var t = rc[i]; var s = getStatus(t);
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:flex-start">'
-        + '<div style="flex:1"><div style="font-weight:600;font-size:12px;line-height:1.4">' + t.content + '</div>'
-        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">&#128204; ' + deptLabel(t.dept) + ' &middot; &#128197; ' + fmtDate(t.deadline) + '</div></div>'
-        + '<span class="' + badgeCls(s) + '">' + statusLabel(s) + '</span></div>';
-    }
-    rl.innerHTML = html;
-  }
-}
-
 // ─── DEPT STATS ───────────────────────────────────────────────────────
 function getDeptStats(key) {
   var dt = tasks.filter(function(t){ return t.dept === key; });
@@ -1376,54 +1335,6 @@ function getDeptStats(key) {
   var warn  = dt.filter(function(t){ return getStatus(t) === 'sap'; }).length;
   var avgP  = total ? Math.round(dt.reduce(function(s,t){ return s + getPct(t); }, 0) / total) : 0;
   return { total: total, done: done, prog: prog, late: late, warn: warn, avgP: avgP, tasks: dt };
-}
-
-function renderDepts() {
-  var html = '';
-  for (var di = 0; di < MAIN_DEPTS.length; di++) {
-    var cfg = MAIN_DEPTS[di];
-    var st = getDeptStats(cfg.key);
-    var donePct = st.total ? Math.round(st.done / st.total * 100) : 0;
-    var bc = donePct >= 80 ? '#27ae60' : donePct >= 50 ? '#2980b9' : donePct >= 20 ? '#e67e22' : '#c0392b';
-    var urg = st.tasks.filter(function(t){ var s = getStatus(t); return s === 'qua' || s === 'sap'; }).slice(0,3);
-    var show = urg.length ? urg : st.tasks.slice().sort(function(a,b){ return b.id - a.id; }).slice(0,3);
-    var name = DEPT_MAP[cfg.key];
-
-    html += '<div class="dc">'
-      + '<div class="dch ' + cfg.cls + '">'
-      + '<div class="dci">' + cfg.icon + '</div>'
-      + '<div><div class="dcn">' + name + '</div><div style="font-size:10px;opacity:.75;margin-top:2px">' + st.total + ' nhiệm vụ &middot; ' + donePct + '% hoàn thành</div></div>'
-      + '</div>'
-      + '<div class="dcb">'
-      + '<div class="dst">'
-      + '<div class="ds"><div class="ds-n" style="color:#2980b9">' + st.prog + '</div><div class="ds-l">Dang lam</div></div>'
-      + '<div class="ds"><div class="ds-n" style="color:#27ae60">' + st.done + '</div><div class="ds-l">Hoàn thành</div></div>'
-      + '<div class="ds"><div class="ds-n" style="color:#c0392b">' + st.late + '</div><div class="ds-l">Quá hạn</div></div>'
-      + '<div class="ds"><div class="ds-n" style="color:#e67e22">' + st.warn + '</div><div class="ds-l">Sap han</div></div>'
-      + '</div>'
-      + '<div class="dpl"><span>Tiến độ TB</span><span style="font-weight:700;color:' + bc + '">' + st.avgP + '%</span></div>'
-      + '<div class="dpb"><div class="dpbf" style="width:' + st.avgP + '%;background:' + bc + '"></div></div>'
-      + '<div style="margin-top:10px">'
-      + '<div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">'
-      + (urg.length ? '&#9888; Cần xử lý ngay' : '&#128203; Nhiệm vụ gần đây') + '</div>';
-    if (st.total === 0) {
-      html += '<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted)">Chưa có nhiệm vụ nào</div>';
-    } else {
-      html += '<div class="dtp">';
-      for (var si = 0; si < show.length; si++) {
-        var tt = show[si]; var ss = getStatus(tt);
-        html += '<div class="dtpi"><span class="' + badgeCls(ss) + '" style="font-size:9px;flex-shrink:0">' + statusLabel(ss) + '</span>'
-          + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + tt.content + '</span></div>';
-      }
-      html += '</div>';
-    }
-    html += '</div></div>'
-      + '<div class="dcf">'
-      + '<button class="btn b-pr b-sm" style="flex:1" onclick="filterDeptGo(\'' + cfg.key + '\')">&#128203; Xem tất cả</button>'
-      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + cfg.key + '\')">&#10133; Thêm</button>' : '')
-      + '</div></div>';
-  }
-  document.getElementById('deptGrid').innerHTML = html;
 }
 
 function openModalDept(k) {
@@ -2636,7 +2547,10 @@ function renderDepts() {
       return patchSafeNumber(b.id, 0) - patchSafeNumber(a.id, 0);
     }).slice(0, 3);
 
-    var name = DEPT_MAP[cfg.key];
+    var name = DEPT_MAP[cfg.key] || cfg.key;
+    var canAddForThisDept =
+      currentRole === 'admin' ||
+      (currentRole === 'dept' && String(cfg.key) === String(currentDept || ''));
 
     html += '<div class="dc">'
       + '<div class="dch ' + patchSafeText(cfg.cls) + '">'
@@ -2679,7 +2593,7 @@ function renderDepts() {
     html += '</div></div>'
       + '<div class="dcf">'
       + '<button class="btn b-pr b-sm" style="flex:1" onclick="filterDeptGo(\'' + patchSafeId(cfg.key) + '\')">&#128203; Xem tất cả</button>'
-      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + patchSafeId(cfg.key) + '\')">&#10133; Thêm</button>' : '')
+      + (canAddForThisDept ? '<button class="btn b-gr b-sm" onclick="openModalDept(\'' + patchSafeId(cfg.key) + '\')">&#10133; Thêm</button>' : '')
       + '</div></div>';
   }
 
