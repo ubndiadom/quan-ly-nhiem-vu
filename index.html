@@ -2554,29 +2554,6 @@ function patchMapDeptNameToKey(name) {
 
   return 'KH';
 }
-
-/* VÁ LỖI ADMIN_PIN:
-   File hiện tại còn checkPin() gọi ADMIN_PIN nhưng ADMIN_PIN không còn khai báo.
-   Bản này không hardcode PIN ở frontend. PIN chỉ lưu tạm trong sessionStorage.
-   Backend GAS sẽ kiểm tra đúng/sai khi lưu/xóa. */
-function checkPin() {
-  if (!pinBuffer) {
-    document.getElementById('pinErr').textContent = 'Vui lòng nhập mã PIN.';
-    return;
-  }
-
-  writeToken = pinBuffer;
-  sessionStorage.setItem('ubnd_write_token', writeToken);
-
-  isAdmin = true;
-  closePinModal();
-  updateRoleBadge();
-  updateAdminUI();
-  renderAll();
-
-  showToast('Đã bật chế độ Quản trị. PIN sẽ được máy chủ kiểm tra khi lưu/xóa.', 'success');
-}
-
 /* DASHBOARD - bản escapeHtml */
 function renderDashboard() {
   var urg = tasks.filter(function(t) {
