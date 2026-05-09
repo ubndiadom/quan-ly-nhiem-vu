@@ -1677,8 +1677,8 @@ function renderTable() {
       + '<td class="hm"><span class="' + priCls + '">' + priLabel(pp) + '</span></td>'
       + '<td><div class="acell">'
       + '<button class="btn b-pr b-sm" onclick="openDetail(' + t.id + ')" title="Chi tiết">&#128065;</button>'
-      + (isAdmin ? '<button class="btn b-gr b-sm" onclick="openModal(' + t.id + ')" title="Chỉnh sửa">&#9997;</button>' : '')
-      + (isAdmin ? '<button class="btn b-rd b-sm" onclick="delTask(' + t.id + ')" title="Xóa">&#128465;</button>' : '')
+      + (canEditTask(t) ? '<button class="btn b-gr b-sm" onclick="openModal(' + t.id + ')" title="Chỉnh sửa">&#9997;</button>' : '')
+      + (canDeleteTask(t) ? '<button class="btn b-rd b-sm" onclick="delTask(' + t.id + ')" title="Xóa">&#128465;</button>' : '')
       + '</div></td></tr>';
   }
   tb.innerHTML = html;
@@ -1756,8 +1756,8 @@ function renderReminders() {
       + ' &middot; <strong class="' + (isLate ? 'dllt' : 'dlwn') + '">' + (isLate ? 'Quá hạn ' + Math.abs(d) + ' ngày' : 'Còn ' + d + ' ngày') + '</strong></div>'
       + (t.note ? '<div style="font-size:11px;margin-top:3px;color:var(--muted)">&#128221; ' + t.note + '</div>' : '')
       + '<div class="rma">'
-      + (isAdmin ? '<button class="btn b-pr b-sm" onclick="openModal(' + t.id + ')">&#9997; Cập nhật</button>' : '')
-      + (isAdmin ? '<button class="btn b-gn b-sm" onclick="markDone(' + t.id + ')">&#9989; Hoàn thành</button>' : '')
+      + (canEditTask(t) ? '<button class="btn b-pr b-sm" onclick="openModal(' + t.id + ')">&#9997; Cập nhật</button>' : '')
+      + (canCompleteTask(t) && t.status !== 'hoan' ? '<button class="btn b-gn b-sm" onclick="markDone(' + t.id + ')">&#9989; Hoàn thành</button>' : '')
       + '<button class="btn b-gr b-sm" onclick="openDetail(' + t.id + ')">&#128065; Chi tiết</button>'
       + '</div></div></div>';
   }
@@ -1915,7 +1915,7 @@ async function saveTask() {
     setSaving(true, 'Đang lưu nhiệm vụ...');
     var saved = await saveTaskObjectToServer(data);
 
-    if (saved) {
+    if (saved && saved.success) {
       closeModal();
     }
 
@@ -2242,11 +2242,17 @@ function openDetail(id) {
     + (t.note ? '<div class="divider"></div><div class="dtl-sec"><div class="dtl-t">Ghi chú</div><p style="font-size:13px;line-height:1.7">' + escapeHtml(t.note) + '</p></div>' : '')
     + hist;
 
-  document.getElementById('detailFoot').innerHTML =
+    document.getElementById('detailFoot').innerHTML =
     '<button class="btn b-gr" onclick="closeDetail()">Đóng</button>'
-    + (isAdmin ? '<button class="btn b-gn" onclick="closeDetail();markDone(' + t.id + ')">&#9989; Hoàn thành</button>' : '')
-    + (isAdmin ? '<button class="btn b-pr" onclick="closeDetail();openModal(' + t.id + ')">&#9997; Chỉnh sửa</button>' : '')
-    + (isAdmin ? '<button class="btn b-rd" onclick="delTask(' + t.id + ')">&#128465; Xóa</button>' : '');
+    + (canCompleteTask(t) && t.status !== 'hoan'
+      ? '<button class="btn b-gn" onclick="closeDetail();markDone(' + t.id + ')">&#9989; Hoàn thành</button>'
+      : '')
+    + (canEditTask(t)
+      ? '<button class="btn b-pr" onclick="closeDetail();openModal(' + t.id + ')">&#9997; Chỉnh sửa</button>'
+      : '')
+    + (canDeleteTask(t)
+      ? '<button class="btn b-rd" onclick="delTask(' + t.id + ')">&#128465; Xóa</button>'
+      : '');
 
   document.getElementById('detailModal').classList.add('open');
   renderTaskLogsIntoDetail(t.id);
